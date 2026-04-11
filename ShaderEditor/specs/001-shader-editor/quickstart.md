@@ -23,6 +23,13 @@
 3. Test with `ctest --preset default`.
 4. Launch `build-vcpkg/Debug/shader_editor.exe`.
 
+## Release Validation
+
+1. Build Release with `cmake --build build-vcpkg --config Release`.
+2. Run Release tests with `ctest --test-dir build-vcpkg -C Release --output-on-failure`.
+3. Launch `build-vcpkg/Release/shader_editor.exe`.
+4. Repeat the manual smoke validation flow below against the Release binary.
+
 ## Cross-Platform Notes
 
 - On Windows, the provided VS Code task and launch files target the `Debug`
@@ -58,6 +65,8 @@
    responsive while showing the message in the shader errors panel.
 15. Review the core source files and confirm the preview, workspace, and UI
    flow contain explanatory comments for non-obvious behavior.
+16. Confirm the repository `README.md` explains the application architecture,
+   feature workflow, and both Debug and Release build instructions.
 
 ## Smoke Checklist
 
@@ -69,6 +78,9 @@
 - [ ] Orbit and pan both work from the render preview with the mouse
 - [ ] Extended vector and matrix uniforms can be edited without crashing the app
 - [ ] The code review confirms GLM is the active math library in the preview pipeline
+- [ ] The Release build succeeds with `cmake --build build-vcpkg --config Release`
+- [ ] The Release test run succeeds with `ctest --test-dir build-vcpkg -C Release --output-on-failure`
+- [ ] The Release app launches from `build-vcpkg/Release/shader_editor.exe`
 
 ## Expected Outcome
 

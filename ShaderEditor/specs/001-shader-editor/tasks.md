@@ -146,8 +146,8 @@ previewing them without losing workspace state.
 - [X] T047 [P] Add sample shader assets for smoke testing in assets/shaders/basic.vert and assets/shaders/basic.frag
 - [X] T048 [P] Add final smoke-test checklist coverage for quickstart validation in specs/001-shader-editor/quickstart.md
 - [ ] T049 Run the documented build and smoke validation flow and capture any follow-up fixes in specs/001-shader-editor/quickstart.md
-- [ ] T074 [P] Create a repository README with application overview, feature usage, and build instructions in README.md
-- [ ] T075 Build and validate the Release configuration of the application in build-vcpkg/ and document the exact command flow in specs/001-shader-editor/quickstart.md
+- [X] T074 [P] Create a repository README with application overview, feature usage, and build instructions in README.md
+- [X] T075 Build and validate the Release configuration of the application in build-vcpkg/ and document the exact command flow in specs/001-shader-editor/quickstart.md
 
 ---
 
