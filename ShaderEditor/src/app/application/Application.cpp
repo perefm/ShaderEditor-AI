@@ -46,6 +46,25 @@ bool editMultilineString(const char* label, std::string& value, float height) {
     return changed;
 }
 
+std::filesystem::path executableDirectory() {
+#ifdef _WIN32
+    std::wstring buffer(MAX_PATH, L'\0');
+    while (true) {
+        const DWORD copied = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (copied == 0) {
+            break;
+        }
+        if (copied < buffer.size() - 1) {
+            buffer.resize(copied);
+            return std::filesystem::path(buffer).parent_path();
+        }
+        buffer.resize(buffer.size() * 2);
+    }
+#endif
+    // Non-Windows builds fall back to the process working directory until a dedicated helper is needed.
+    return std::filesystem::current_path();
+}
+
 #ifdef _WIN32
 std::optional<std::filesystem::path> openShaderPathDialog(const char* title, const char* filter) {
     char pathBuffer[MAX_PATH] = {};
@@ -90,8 +109,9 @@ bool Application::initialize() {
     ImGui_ImplOpenGL3_Init("#version 330");
 
     registerPanels();
-    exampleVertexPath_ = std::filesystem::path(SHADEREDITOR_SOURCE_DIR) / "assets" / "shaders" / "basic.vert";
-    exampleFragmentPath_ = std::filesystem::path(SHADEREDITOR_SOURCE_DIR) / "assets" / "shaders" / "basic.frag";
+    const std::filesystem::path runtimeAssetsDirectory = executableDirectory() / "assets" / "shaders";
+    exampleVertexPath_ = runtimeAssetsDirectory / "basic.vert";
+    exampleFragmentPath_ = runtimeAssetsDirectory / "basic.frag";
     const auto layoutPath = std::filesystem::path("build") / "layout.txt";
     if (std::filesystem::exists(layoutPath)) {
         layoutState_ = layoutPersistence_.load(layoutPath);
@@ -100,6 +120,7 @@ bool Application::initialize() {
         layoutState_.setFocusedPanel("shader-editor");
     }
     restorePanelVisibility();
+    diagnostics_.addInfo("Runtime assets directory: " + runtimeAssetsDirectory.string());
     loadExampleShaders();
     diagnostics_.addInfo("Application initialized.");
     return true;
@@ -152,6 +173,7 @@ void Application::registerPanels() {
 }
 
 void Application::drawUi() {
+    // Keyboard shortcuts are dispatched before panels draw so menu actions and buttons stay in sync.
     if (ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
         shaderEditorPanel_.pressCtrlEnter();
     }
@@ -166,7 +188,7 @@ void Application::drawUi() {
 
 bool Application::loadExampleShaders() {
     if (!std::filesystem::exists(exampleVertexPath_) || !std::filesystem::exists(exampleFragmentPath_)) {
-        diagnostics_.addError("Example shaders are missing from assets/shaders.");
+        diagnostics_.addError("Example shaders are missing from runtime assets folder: " + exampleVertexPath_.parent_path().string());
         return false;
     }
 
@@ -234,6 +256,7 @@ void Application::drawMainMenu() {
         return;
     }
 
+    // Menu actions mirror the inline buttons from the editor panel.
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Load Example Shaders")) {
             loadExampleShaders();
@@ -339,6 +362,7 @@ void Application::drawShaderEditorWindow() {
             ImGui::TextWrapped("%s", documentDialogs_.unsavedChangesMessage(document).c_str());
         }
 
+        // ImGui text inputs require a writable contiguous buffer, so the editor works on temporary copies.
         std::string vertexSource = document.vertexSource;
         ImGui::SeparatorText("Vertex");
         if (editMultilineString("##vertex-source", vertexSource, 220.0F)) {
@@ -378,6 +402,7 @@ void Application::drawRenderViewWindow() {
         const ImVec2 available = ImGui::GetContentRegionAvail();
         const int previewWidth = std::max(1, static_cast<int>(available.x));
         const int previewHeight = std::max(180, static_cast<int>(available.y - ImGui::GetTextLineHeightWithSpacing() * 2.0F));
+        // The renderer draws to an offscreen OpenGL texture that is then embedded into ImGui.
         const auto& session = renderViewPanel_.renderPreview(previewWidth, previewHeight);
         if (session.previewTextureId != 0) {
             ImGui::Image((ImTextureID)(intptr_t)session.previewTextureId,
@@ -415,6 +440,7 @@ void Application::drawUniformsWindow() {
         }
 
         for (const auto& uniform : uniforms) {
+            // Widget selection is driven by the discovered GLSL type for each uniform.
             if (!uniform.editable) {
                 ImGui::Text("%s (%s) [read only]", uniform.name.c_str(), uniform.kind.c_str());
                 continue;

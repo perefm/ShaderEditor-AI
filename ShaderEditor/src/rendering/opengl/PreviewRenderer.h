@@ -14,14 +14,17 @@
 #include <vector>
 
 namespace shadereditor {
+// Owns the OpenGL objects required to validate shaders and render the offscreen preview.
 class PreviewRenderer {
   public:
     PreviewRenderer() = default;
     ~PreviewRenderer();
 
+    // Validates shaders and refreshes CPU-side preview state.
     RenderSession updatePreview(const ShaderPairDocument& document,
                                 const std::string& primitiveId,
                                 const std::vector<UniformDefinition>& uniforms);
+    // Draws the current primitive into the preview framebuffer.
     RenderSession renderFrame(const ShaderPairDocument& document,
                               RenderSession session,
                               const std::vector<UniformDefinition>& uniforms,
@@ -30,6 +33,7 @@ class PreviewRenderer {
 
   private:
     struct MeshBuffers {
+        // GPU handles for one cached primitive mesh.
         GLuint vao {0};
         GLuint vbo {0};
         GLsizei vertexCount {0};

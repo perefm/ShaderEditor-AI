@@ -5,6 +5,7 @@ WorkspaceController::WorkspaceController(DiagnosticsState& diagnostics) : diagno
 
 bool WorkspaceController::openShaders(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath) {
     try {
+        // Loading the shader pair together gives the preview everything it needs in one pass.
         editorState_.attachDocument(fileService_.load(vertexPath, fragmentPath));
         diagnostics_.addInfo("Loaded shader pair.");
         refreshUniforms();
@@ -26,6 +27,7 @@ bool WorkspaceController::openVertexShader(const std::filesystem::path& vertexPa
         if (!document.fragmentSource.empty()) {
             return updateShaders();
         }
+        // Keep the preview idle until the complementary stage is available.
         renderSession_.frameStatus = FrameStatus::Idle;
         renderSession_.previewSummary = "Vertex shader loaded. Load a fragment shader to render.";
         renderSession_.errorMessage.clear();
@@ -47,6 +49,7 @@ bool WorkspaceController::openFragmentShader(const std::filesystem::path& fragme
         if (!document.vertexSource.empty()) {
             return updateShaders();
         }
+        // Keep the preview idle until the complementary stage is available.
         renderSession_.frameStatus = FrameStatus::Idle;
         renderSession_.previewSummary = "Fragment shader loaded. Load a vertex shader to render.";
         renderSession_.errorMessage.clear();
@@ -82,6 +85,7 @@ bool WorkspaceController::updateShaders() {
 }
 
 const RenderSession& WorkspaceController::renderPreview(int width, int height) {
+    // Rendering is lazy so frames that only rearrange UI do not rebuild the preview texture needlessly.
     renderSession_ = previewRenderer_.renderFrame(editorState_.document(), renderSession_, uniformState_.definitions(), width, height);
     return renderSession_;
 }
@@ -89,11 +93,13 @@ const RenderSession& WorkspaceController::renderPreview(int width, int height) {
 bool WorkspaceController::handleKeyChord(const std::string& chord) { return chord == "Ctrl+Enter" ? updateShaders() : false; }
 
 void WorkspaceController::selectPrimitive(const std::string& primitiveId) {
+    // Primitive changes go through the same update path as shader edits to keep diagnostics unified.
     renderSession_.selectedPrimitiveId = primitiveId;
     updateShaders();
 }
 
 void WorkspaceController::applyUniform(const std::string& name, UniformValue value) {
+    // Uniform edits reuse the preview refresh path so the rendered result updates immediately.
     uniformState_.apply(name, std::move(value));
     updateShaders();
 }

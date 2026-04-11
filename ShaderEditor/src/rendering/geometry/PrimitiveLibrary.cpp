@@ -3,6 +3,7 @@
 #include "rendering/geometry/BuiltInPrimitives.h"
 
 namespace shadereditor {
+// The library is currently static, so it is fully populated at construction time.
 PrimitiveLibrary::PrimitiveLibrary() : primitives_(makeBuiltInPrimitives()) {}
 
 const PreviewPrimitive* PrimitiveLibrary::findById(const std::string& id) const {

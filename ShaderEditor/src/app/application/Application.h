@@ -16,6 +16,7 @@
 #include <filesystem>
 
 namespace shadereditor {
+// Owns the window lifetime and renders all top-level dockable panels.
 class Application {
   public:
     Application();
@@ -26,11 +27,14 @@ class Application {
     [[nodiscard]] WorkspaceController& workspace() { return workspace_; }
 
   private:
+    // Example shaders live under the runtime assets folder next to the executable.
     bool loadExampleShaders();
     bool openVertexShaderFromDialog();
     bool openFragmentShaderFromDialog();
+    // Dockable panel visibility is persisted between launches.
     void restorePanelVisibility();
     void storePanelVisibility();
+    // Each major tool panel is drawn independently so ImGui docking can rearrange them.
     void drawMainMenu();
     void drawWorkspaceHost();
     void drawShaderEditorWindow();
@@ -41,8 +45,11 @@ class Application {
     void registerPanels();
     void drawUi();
 
+    // Native window + OpenGL context bootstrap.
     WindowContext windowContext_;
+    // Shared log stream rendered by the diagnostics UI.
     DiagnosticsState diagnostics_;
+    // Central document, uniform and preview state.
     WorkspaceController workspace_;
     WorkspaceLayoutState layoutState_;
     LayoutPersistenceService layoutPersistence_;
@@ -53,6 +60,7 @@ class Application {
     DiagnosticsPanel diagnosticsPanel_;
     ShaderErrorsPanel shaderErrorsPanel_;
     DocumentDialogs documentDialogs_;
+    // Runtime paths for the bundled example shaders.
     std::filesystem::path exampleVertexPath_;
     std::filesystem::path exampleFragmentPath_;
     bool showShaderEditor_ {true};

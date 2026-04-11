@@ -6,6 +6,7 @@
 
 namespace shadereditor {
 namespace {
+// Read raw text as-is so GLSL source is preserved exactly between load and save.
 std::string readFile(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -19,6 +20,7 @@ std::string readFile(const std::filesystem::path& path) {
 
 ShaderPairDocument ShaderFileService::load(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath) const {
     ShaderPairDocument document;
+    // Loading both files together keeps the editor document internally consistent.
     document.vertexPath = vertexPath;
     document.fragmentPath = fragmentPath;
     document.vertexSource = readFile(vertexPath);
@@ -34,6 +36,7 @@ void ShaderFileService::save(ShaderPairDocument& document) const {
         throw std::runtime_error("Cannot save shaders without both file paths");
     }
 
+    // Each stage is written independently so the saved paths remain explicit in the document metadata.
     std::ofstream vertexOut(*document.vertexPath, std::ios::binary | std::ios::trunc);
     if (!vertexOut) {
         throw std::runtime_error("Unable to save vertex shader: " + document.vertexPath->string());

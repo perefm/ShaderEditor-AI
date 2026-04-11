@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Extracts editable uniform metadata from shader source code.
 class UniformIntrospectionService {
   public:
     std::vector<UniformDefinition> discover(const ShaderPairDocument& document) const;

@@ -4,6 +4,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Tracks the panel ids that are eligible to live in the shared dockspace.
 class DockspaceHost {
   public:
     void registerPanel(const std::string& panelId);

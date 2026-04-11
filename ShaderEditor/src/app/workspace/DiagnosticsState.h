@@ -4,6 +4,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Collects informational and shader-specific messages shown in the diagnostics UI.
 class DiagnosticsState {
   public:
     void addInfo(std::string message);

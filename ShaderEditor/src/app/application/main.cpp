@@ -1,6 +1,7 @@
 #include "app/application/Application.h"
 
 int main() {
+    // The application object owns initialization, the UI loop and orderly shutdown.
     shadereditor::Application app;
     if (!app.initialize()) {
         return 1;

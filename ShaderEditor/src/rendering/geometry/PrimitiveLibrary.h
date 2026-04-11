@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Registry of built-in meshes available in the preview viewport.
 class PrimitiveLibrary {
   public:
     PrimitiveLibrary();

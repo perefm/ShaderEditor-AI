@@ -3,6 +3,7 @@
 #include "app/workspace/DiagnosticsState.h"
 
 namespace shadereditor {
+// Read-only view over the shared diagnostics state.
 class DiagnosticsPanel {
   public:
     explicit DiagnosticsPanel(const DiagnosticsState& diagnostics);

@@ -5,6 +5,7 @@
 #include <filesystem>
 
 namespace shadereditor {
+// Persists and restores dock layout state on disk.
 class LayoutPersistenceService {
   public:
     void save(const WorkspaceLayoutState& layout, const std::filesystem::path& path) const;

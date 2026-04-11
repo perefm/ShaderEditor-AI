@@ -4,6 +4,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Serializable description of which docked panels are visible and focused.
 class WorkspaceLayoutState {
   public:
     void setOpenPanels(std::vector<std::string> openPanels);

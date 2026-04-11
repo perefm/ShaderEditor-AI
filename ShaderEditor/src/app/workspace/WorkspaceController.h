@@ -12,18 +12,22 @@
 #include <filesystem>
 
 namespace shadereditor {
+// Coordinates document loading, uniform discovery and preview rendering for the UI layer.
 class WorkspaceController {
   public:
     explicit WorkspaceController(DiagnosticsState& diagnostics);
 
+    // File operations update the active document and rebuild dependent state when possible.
     bool openShaders(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath);
     bool openVertexShader(const std::filesystem::path& vertexPath);
     bool openFragmentShader(const std::filesystem::path& fragmentPath);
     bool saveShaders();
     void discardUnsavedChanges();
+    // updateShaders refreshes the logical render session; actual drawing happens on demand.
     bool updateShaders();
     const RenderSession& renderPreview(int width, int height);
     bool handleKeyChord(const std::string& chord);
+    // Preview interaction flows through the workspace so panels do not manipulate render state directly.
     void selectPrimitive(const std::string& primitiveId);
     void applyUniform(const std::string& name, UniformValue value);
     void orbitPreview(const glm::vec2& delta);

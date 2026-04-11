@@ -7,9 +7,11 @@
 #include <unordered_map>
 
 namespace shadereditor {
+// Tracks the state of shader compilation/linking independently from per-frame rendering.
 enum class ProgramStatus { Uncompiled, Compiled, Linked, Failed };
 enum class FrameStatus { Idle, Rendering, Error };
 
+// Snapshot of everything the UI needs to describe and display the preview.
 struct RenderSession {
     std::string selectedPrimitiveId {"plane"};
     ProgramStatus programStatus {ProgramStatus::Uncompiled};

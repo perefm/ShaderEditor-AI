@@ -6,6 +6,7 @@
 #include <string>
 
 namespace shadereditor {
+// Thin UI-facing wrapper around preview rendering and interaction actions.
 class RenderViewPanel {
   public:
     explicit RenderViewPanel(WorkspaceController& controller);

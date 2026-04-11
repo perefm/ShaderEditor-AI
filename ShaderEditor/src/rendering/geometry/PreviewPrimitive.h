@@ -6,6 +6,7 @@
 #include <vector>
 
 namespace shadereditor {
+// CPU-side description of a preview mesh before it is uploaded to OpenGL.
 struct PreviewPrimitive {
     std::string id;
     std::string label;

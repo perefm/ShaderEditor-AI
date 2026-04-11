@@ -3,6 +3,7 @@
 #include "app/workspace/WorkspaceController.h"
 
 namespace shadereditor {
+// Small façade for uniform edits initiated from the UI.
 class UniformsPanel {
   public:
     explicit UniformsPanel(WorkspaceController& controller);

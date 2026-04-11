@@ -12,6 +12,7 @@
 #include <vector>
 
 namespace shadereditor {
+// Holds the editable uniform set currently exposed to the UI.
 class UniformState {
   public:
     void setDefinitions(const std::vector<UniformDefinition>& definitions);

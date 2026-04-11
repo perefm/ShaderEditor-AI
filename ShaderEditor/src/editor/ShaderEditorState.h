@@ -3,6 +3,7 @@
 #include "editor/ShaderPairDocument.h"
 
 namespace shadereditor {
+// Owns the active vertex/fragment document being edited.
 class ShaderEditorState {
   public:
     void attachDocument(ShaderPairDocument document);

@@ -61,7 +61,6 @@ add_library(shader_editor_core
 
 target_include_directories(shader_editor_core PUBLIC src third_party)
 target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32)
-target_compile_definitions(shader_editor_core PUBLIC SHADEREDITOR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 if(WIN32)
     target_link_libraries(shader_editor_core PUBLIC comdlg32)
 endif()
@@ -76,5 +75,12 @@ if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll")
             "$<TARGET_FILE_DIR:shader_editor>/glfw3.dll"
     )
 endif()
+
+# Ship the runtime assets beside the executable so example shaders are resolved from "<exe>/assets".
+add_custom_command(TARGET shader_editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${PROJECT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:shader_editor>/assets"
+)
 
 add_subdirectory(tests)

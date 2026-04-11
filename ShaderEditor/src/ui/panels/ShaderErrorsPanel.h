@@ -3,6 +3,7 @@
 #include "app/workspace/DiagnosticsState.h"
 
 namespace shadereditor {
+// Read-only view over shader compilation and linking errors.
 class ShaderErrorsPanel {
   public:
     explicit ShaderErrorsPanel(const DiagnosticsState& diagnostics);
