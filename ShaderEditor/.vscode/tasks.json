@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake-configure",
+      "type": "shell",
+      "command": "cmake --preset default"
+    },
+    {
+      "label": "cmake-build",
+      "type": "shell",
+      "command": "cmake --build --preset default",
+      "dependsOn": "cmake-configure",
+      "group": "build"
+    },
+    {
+      "label": "ctest",
+      "type": "shell",
+      "command": "ctest --preset default",
+      "dependsOn": "cmake-build",
+      "group": "test"
+    }
+  ]
+}

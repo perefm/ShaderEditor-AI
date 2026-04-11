@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Shader Editor",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-vcpkg/Debug/shader_editor.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cmake-build",
+      "MIMode": "gdb"
+    }
+  ]
+}

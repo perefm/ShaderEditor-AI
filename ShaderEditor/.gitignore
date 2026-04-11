@@ -1,0 +1,15 @@
+.agents/
+build-vcpkg/
+build/
+bin/
+obj/
+out/
+*.o
+*.so
+*.a
+*.exe
+*.dll
+*.log
+.env*
+Thumbs.db
+.DS_Store
