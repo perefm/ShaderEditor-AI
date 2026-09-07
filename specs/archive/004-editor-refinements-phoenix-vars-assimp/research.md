@@ -48,7 +48,8 @@ existing `PreviewInteractionState`/`UniformState`) owned by
 - `elapsedSeconds: float` (`t`)
 - `sectionDurationSeconds: float` (`tend`, user-editable, independent of play state)
 - `bpm: float` (user-editable)
-- Derived `beat()` accessor: `bpm <= 0 ? 0.0f : elapsedSeconds * bpm / 60.0f`
+- Derived `beat()` accessor: `bpm <= 0 ? 0.0f : fract(elapsedSeconds * bpm / 60.0f)`,
+  yielding a normalized `[0, 1)` beat phase.
 
 Each rendered frame, `WorkspaceController::renderPreview` advances
 `elapsedSeconds` by the frame delta time only when `isPlaying` is true (delta
@@ -77,7 +78,9 @@ keep in sync; a pure function of `t`/`bpm` is simpler and cannot drift.
 
 ## 4. BPM ≤ 0 guard
 
-**Decision**: `beat()` returns `0.0f` whenever `bpm <= 0.0f`, per FR-010 (this
+**Decision**: `beat()` returns `0.0f` whenever `bpm <= 0.0f`, per FR-010, and
+returns the fractional part of the positive-BPM beat count so it remains in
+`[0, 1)` (this
 was already resolved during spec clarification, not re-litigated here).
 
 ## 5. Assimp integration and texture/material naming
@@ -179,6 +182,23 @@ main thread (same as today's synchronous shader/image loading), but is scoped
 to only the parse + texture decode step, not per-frame work; the spec's
 SC-006 requirement ("no UI freeze beyond a brief, expected load time") is
 satisfied by keeping sample/test fixture models small (per Success Criteria)
+
+## 9. Final implementation notes
+
+The implementation also covers items discovered during validation:
+
+- Embedded Assimp textures (`*0`, `*1`, ...) are copied from `.glb` scenes and
+  decoded with `stbi_load_from_memory`; external texture paths continue to use
+  the Phoenix-compatible material slot names.
+- Animation clip selection is explicit; `-1` selects bind pose and valid clip
+  indices loop from the shared playback clock.
+- Model AABB bounds scale camera distance, pan, zoom limits, and clip planes.
+- `MVP`, `model`, and `uCameraPos` are engine-owned and excluded from editable
+  uniform discovery.
+- The Render panel offers model opening and animation selection, while Shader
+  Help documents all automatic uniforms and vertex attributes.
+
+Research status: complete and closed 2026-09-07.
 rather than introducing async loading infrastructure, which is out of scope
 for this feature per the Assumptions section (no mention of background
 loading in the spec).

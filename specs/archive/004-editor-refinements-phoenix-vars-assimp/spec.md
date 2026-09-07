@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-editor-refinements-phoenix-vars-assimp`
 **Created**: 2026-09-07
-**Status**: Draft
+**Status**: Implemented and closed (2026-09-07)
 **Input**: User description: "Añadir 'Save As' al menú File; renombrar 'Save Current Shaders' a 'Save shader' y 'Update Shaders' a 'Update Shader'; dar soporte a variables uniform automáticas del motor Phoenix (t, tend, beat, ...) rellenadas por el propio ShaderEditor; dar soporte a abrir modelos 3D con Assimp, reproduciendo el naming de texturas y el soporte de animación de la sección drawScene de Phoenix."
 
 **Phoenix Reference Commit**: All Phoenix-specific behavior in this spec
@@ -262,7 +262,8 @@ the plain diffuse lighting used elsewhere.
   and is currently open elsewhere or read-only? (Should surface the same kind
   of diagnostic/error the existing save path uses for write failures.)
 - What happens when BPM is set to 0 or a negative value? Per FR-010, `beat`
-  MUST be held at 0 in that case rather than producing NaN/Inf.
+  MUST be held at 0 in that case rather than producing NaN/Inf. For positive
+  BPM, `beat` is the normalized phase in `[0, 1)`, wrapping at each beat.
 - What happens when `tend` is 0? Since `t`/`beat` do not divide by `tend` in
   this spec (that ratio, if any, is left to the shader author), no special
   handling beyond passing the literal value is required in this iteration.
@@ -312,8 +313,9 @@ the plain diffuse lighting used elsewhere.
   state.
 - **FR-009**: The system MUST provide an editable numeric "BPM" control in the
   UI and MUST automatically supply a uniform named `beat` (type float) equal
-  to `t * bpm / 60` to any shader that declares it, recomputed every frame
-  from the current `t` and BPM values.
+  to the fractional part of `t * bpm / 60` to any shader that declares it,
+  recomputed every frame from the current `t` and BPM values. Therefore
+  `beat` is always in `[0, 1)` for positive BPM and wraps at each beat.
 - **FR-010**: The system MUST guard the `beat` computation so that a BPM of
   zero or a negative value never produces NaN/Inf: when BPM <= 0, `beat` MUST
   be held at 0 (no progression) instead of being computed from `t * bpm / 60`.
@@ -398,6 +400,18 @@ the plain diffuse lighting used elsewhere.
   glTF's `pbrMetallicRoughness` model (target: under 1 MB, `.glb` preferred)
   that is royalty-free for redistribution in this repository, with any
   required attribution recorded alongside the asset.
+- **FR-029**: Engine-owned uniforms `MVP`, `model`, and `uCameraPos` MUST be
+  uploaded automatically and excluded from the editable Uniforms panel. The
+  Shader Help panel MUST document all engine-owned uniforms, material texture
+  naming, and Phoenix-compatible vertex attributes.
+- **FR-030**: The Render panel MUST provide an `Open Model...` action, an
+  animation clip selector for loaded models (including a bind-pose option),
+  and model selection without re-importing.
+- **FR-031**: Imported textures MUST support both external files and embedded
+  encoded image data in formats such as `.glb`.
+- **FR-032**: Runtime assets MUST include an animated material-only shader that
+  uses `Mat_Ka`, `Mat_Kd`, `Mat_Ks`, and `Mat_KsStrenght` without texture
+  sampling.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -462,7 +476,8 @@ the plain diffuse lighting used elsewhere.
   will be addressed in future iterations, one at a time, as follow-up specs.
 - `beat` has no real audio/BPM-detection engine behind it; it is purely
   derived from elapsed time and a user-entered BPM value
-  (`beat = t * bpm / 60`), not from an actual audio track.
+  (`beat = fract(t * bpm / 60)` for positive BPM), not from an actual audio
+  track. It is always normalized to `[0, 1)`.
 - The Assimp import scope for this spec is limited to loading a single model
   as the active render target with textures and skeletal animation, mirroring
   Phoenix's `drawScene` section; it does not include multi-model scenes,
@@ -488,3 +503,17 @@ the plain diffuse lighting used elsewhere.
   licensed CC-BY 4.0; it is royalty-free and redistributable in this
   repository provided the CC-BY attribution is kept alongside the asset (see
   `assets/models/CesiumMan/README.md`).
+
+## Closure
+
+This specification is implemented and closed on 2026-09-07. The final
+implementation is covered by commits `edb5622`, `7118a87`, `36dd9c0`,
+`0de028a`, `492dc73`, `c889b8e`, and `ec87b0f` on
+`004-editor-refinements-phoenix-vars-assimp`.
+
+Debug and Release builds succeeded and the complete CTest suite passed. The
+README, Shader Help panel, research notes, data model, contracts, and
+quickstart have been synchronized with the shipped behavior. Any future
+Phoenix naming or behavior changes should be handled in a new follow-up spec
+against reference commit
+`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d`.

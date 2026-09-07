@@ -13,7 +13,8 @@ Owned by `WorkspaceController`. Value-type state analogous to
 | `bpm` | `float` | User-editable. Default e.g. `120.0F`. May be set to 0 or negative by the user. |
 
 Derived:
-- `beat() const -> float`: returns `0.0F` if `bpm <= 0.0F`, else `elapsedSeconds * bpm / 60.0F`.
+- `beat() const -> float`: returns `0.0F` if `bpm <= 0.0F`, else
+  `fract(elapsedSeconds * bpm / 60.0F)`, always in `[0, 1)`.
 
 Behaviors:
 - `play()`, `pause()`, `reset()` (`elapsedSeconds = 0.0F`, does not change `isPlaying`/`sectionDurationSeconds`/`bpm`).
@@ -73,6 +74,7 @@ Assimp types.
 | `hasSkeleton` | `bool` | True if any mesh has bone data. |
 | `boneCount` | `std::size_t` | Total distinct bones across the model, used to size the `gBones` upload array. |
 | `sourcePath` | `std::filesystem::path` | The file the model was imported from. |
+| `boundsMin` / `boundsMax` | `glm::vec3` | Bind-pose AABB used to scale model camera framing and interaction. |
 
 ### ModelMesh
 
@@ -98,7 +100,7 @@ Assimp types.
 
 | Field | Type | Notes |
 |---|---|---|
-| `textureSlots` | `std::vector<ModelTextureSlot>` | Each slot carries the Phoenix-style shader uniform name (`texture_diffuse1`, ...) and a loaded texture handle/path. |
+| `textureSlots` | `std::vector<ModelTextureSlot>` | Each slot carries the Phoenix-style shader uniform name (`texture_diffuse1`, ...), an external path or embedded encoded image bytes, and a lazy GL handle. |
 | `colorAmbient` | `glm::vec3` | → `Mat_Ka` |
 | `colorDiffuse` | `glm::vec3` | → `Mat_Kd` |
 | `colorSpecular` | `glm::vec3` | → `Mat_Ks` |
@@ -110,6 +112,7 @@ Assimp types.
 |---|---|---|
 | `shaderUniformName` | `std::string` | E.g. `"texture_diffuse1"`, produced per FR-015 naming rule. |
 | `sourcePath` | `std::filesystem::path` | Resolved texture file path on disk. |
+| `embeddedImageData` | `std::vector<unsigned char>` | Encoded image bytes copied from an embedded Assimp texture (for example a `.glb`). |
 | `glTextureId` | `GLuint` | Populated by `PreviewRenderer` when the texture is uploaded (0 until then). |
 
 ## SkeletalAnimator (new)
@@ -119,7 +122,7 @@ matrices) that, given a `ModelDocument` and the current playback time
 (`PlaybackClockState::elapsedSeconds`), computes the current array of
 `glm::mat4` bone transforms to upload as `gBones`. Not persisted in
 `RenderSession`; recomputed each frame by `PreviewRenderer` from
-`ModelDocument` + `PlaybackClockState`.
+`ModelDocument` + `PlaybackClockState` + the selected animation index.
 
 ## ShaderPairDocument (unchanged shape, new usage)
 
@@ -148,3 +151,12 @@ operate on the new path.
   `selectedPrimitiveId = id`; the cached `ModelDocument` (if any) is retained
   in `WorkspaceController` for later reselection via a new `selectModel()`
   action (no re-import).
+- **Animation selection**: `selectedAnimationIndex == -1` produces the bind
+  pose; a valid index samples that `AnimationClip` in a loop. New models
+  default to their first clip when one exists.
+
+## Closure
+
+Updated 2026-09-07 to reflect the implemented model bounds, embedded texture
+storage, animation selection, engine-owned transform uniforms, and normalized
+beat phase. This data model is final for spec 004.

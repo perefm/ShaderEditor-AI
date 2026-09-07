@@ -66,7 +66,7 @@ class PlaybackClockState {
     [[nodiscard]] float elapsedSeconds() const;         // -> "t"
     [[nodiscard]] float sectionDurationSeconds() const; // -> "tend"
     [[nodiscard]] float bpm() const;
-    [[nodiscard]] float beat() const; // bpm() <= 0.0F ? 0.0F : elapsedSeconds() * bpm() / 60.0F
+    [[nodiscard]] float beat() const; // bpm <= 0 ? 0 : fract(elapsedSeconds * bpm / 60), always [0, 1)
 };
 }  // namespace shadereditor
 ```
@@ -159,7 +159,9 @@ class SkeletalAnimator {
   public:
     // Returns one glm::mat4 per bone (size == document.boneCount), in bone-index order,
     // matching Phoenix's gBones upload order. Returns identity matrices if !document.hasSkeleton.
-    std::vector<glm::mat4> boneTransforms(const ModelDocument& document, float elapsedSeconds) const;
+    std::vector<glm::mat4> boneTransforms(const ModelDocument& document,
+                                          float elapsedSeconds,
+                                          int animationIndex = 0) const;
 };
 }  // namespace shadereditor
 ```
@@ -171,3 +173,23 @@ the exact `shaderUniformName`s recorded on the material; upload
 `gBones` (from `SkeletalAnimator::boneTransforms`) if the shader declares it
 and the model has a skeleton; and issue one draw call per mesh — mirroring
 Phoenix's `Model::Draw`/`Mesh::Draw`/`Mesh::setMaterialShaderVars`.
+
+## 5. Engine-owned transform and UI contracts
+
+`PreviewRenderer` uploads `MVP`, `model`, and `uCameraPos` automatically.
+`UniformIntrospectionService` excludes these names from editable uniform
+discovery. `model` is the orbit-only matrix exposed by
+`PreviewCamera::modelMatrix()`.
+
+`WorkspaceController` exposes `modelAnimationNames()`,
+`selectAnimation(int)`, and `selectedAnimationIndex()`. The Render panel
+provides an `Open Model...` action and an animation combo with a `None`
+bind-pose entry.
+
+`ModelTextureSlot` supports either an external `sourcePath` or encoded
+`embeddedImageData`; `PreviewRenderer` decodes and caches both forms.
+
+The Shader Help panel documents all engine-provided uniforms, Phoenix vertex
+attributes, material names, texture slot names, and `gBones`.
+
+**Contract status**: implemented and closed 2026-09-07.

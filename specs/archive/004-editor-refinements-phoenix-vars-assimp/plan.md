@@ -20,7 +20,8 @@ File-menu items ("Save Current Shaders" → "Save shader", "Update Shaders" →
 "Update Shader") with no behavior change; (3) introduce a playback clock
 (Play/Pause/Reset, editable "section duration" `tend`, editable `bpm`) that
 automatically supplies `t`, `tend`, and `beat` uniforms to any shader that
-declares them, without exposing manual edit controls for those uniforms in
+declares them (`beat` is the normalized `[0, 1)` phase of `t * bpm / 60`),
+without exposing manual edit controls for those uniforms in
 the Uniforms panel; (4) add Assimp-based 3D model import that replaces the
 active preview primitive with a real mesh, binding per-material textures and
 color/scalar properties using Phoenix's exact uniform naming
@@ -39,13 +40,31 @@ and a small royalty-free animated sample model with a
 
 **Language/Version**: C++20 (existing codebase; MSVC/Windows toolchain via CMake + vcpkg)
 **Primary Dependencies**: OpenGL 4.6 core, GLFW, Dear ImGui (docking), GLM, glad, stb_image, imgui_color_text_edit (vendored in `third_party/`), native Win32 file dialogs (`comdlg32`); **new**: Assimp (added via vcpkg)
-**Storage**: Local filesystem only — `.glsl` shader files (existing) and model files (new: `.fbx`, `.gltf`/`.glb`, `.obj`, `.dae`, plus any other format Assimp supports) with their referenced texture files on disk
+**Storage**: Local filesystem only — `.glsl` shader files (existing) and model files (new: `.fbx`, `.gltf`/`.glb`, `.obj`, `.dae`, plus any other format Assimp supports). Textures may be external files or embedded encoded image data in the model.
 **Testing**: CTest via `add_subdirectory(tests)`, GoogleTest/Catch-style unit tests already present under `tests/unit` (existing pattern: `test_*.cpp` per service/component); manual verification steps for OpenGL/UI behavior per constitution
 **Target Platform**: Windows desktop (existing constraint — native file dialogs are Windows-only today; this feature does not add new cross-platform requirements beyond what already exists)
 **Project Type**: Single desktop application (`src/` + `tests/`, existing structure)
 **Performance Goals**: Maintain interactive frame rates in the Render View (no perceptible stutter) while a playback clock updates every frame and while an imported model with a moderate animated rig (order of tens of bones, tens of thousands of vertices) is rendered
 **Constraints**: Must not block the UI thread for more than a brief, expected duration while importing a model (parsing + texture loads); must not regress existing shader open/save/uniform workflows; auto-uniforms must never be user-editable in the Uniforms panel
 **Scale/Scope**: Single active model + single active shader document at a time; no multi-model scenes, no camera/light import from the model file, no model export/save
+
+## Final implementation status
+
+Completed and closed on 2026-09-07. In addition to the original plan, the
+implementation includes:
+
+- normalized `beat = fract(t * bpm / 60)` for positive BPM;
+- embedded `.glb` texture decoding and external texture loading;
+- animation clip selection and bind-pose selection in the Render panel;
+- Render-panel `Open Model...` action;
+- model AABB-driven camera framing and interaction scaling;
+- automatic `MVP`, `model`, and `uCameraPos` uploads with those uniforms hidden
+  from editable discovery;
+- complete Shader Help and README documentation;
+- material-only animated shader and bundled sample assets.
+
+Debug/Release builds and the complete CTest suite passed. No unfinished
+implementation tasks remain for this spec.
 
 ## Constitution Check
 

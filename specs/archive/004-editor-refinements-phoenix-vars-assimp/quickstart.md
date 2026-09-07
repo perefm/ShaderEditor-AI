@@ -66,7 +66,9 @@ Constitution Check ("Verification"). Run after building `shader_editor`
 2. Verify: the Render View now shows the model instead of the previous
    primitive, using the currently active shader.
 3. With a shader declaring `uniform sampler2D texture_diffuse1;`, verify the
-   model's diffuse texture appears correctly mapped.
+   model's diffuse texture appears correctly mapped. For `Fox.glb`, the image
+   is embedded in the `.glb`; for external-texture models, verify the resolved
+   image path is loaded.
 4. With a Phoenix-style skinning shader declaring `uniform mat4 gBones[...]`
    and consuming `aBoneID`/`aBoneWeight`, verify the animation plays back
    using the same Play/Pause/Reset transport as User Story 3, and that
@@ -87,8 +89,24 @@ Constitution Check ("Verification"). Run after building `shader_editor`
 9. Confirm the import of the sample model completes quickly enough that the
    UI does not appear frozen (SC-006) — no explicit timing threshold beyond
    "no perceptible freeze" for the sample-sized assets used in testing.
+10. Open the Render panel's **Open Model...** button and verify it invokes the
+    same native dialog and import path as File → Open Model....
+11. For a model with multiple animation clips, choose each entry in the
+    **Animation** selector and verify the selected clip changes. Choose
+    **None** and verify the bind pose is displayed.
 
-## 5. Regression pass
+## 5. Engine uniforms and normalized beat
+
+1. Open **Shader Help** and verify it documents `MVP`, `model`, `uCameraPos`,
+   `t`, `tend`, `beat`, `Mat_*`, `texture_*`, and `gBones`, plus the Phoenix
+   vertex attributes.
+2. Declare `uniform mat4 model;` in a model shader. Verify it is uploaded
+   automatically and does not appear as an editable row in **Uniforms**.
+3. At 120 BPM, use a shader that visualizes `beat` and verify it follows
+   `0.0 -> 0.5 -> 0.0` at `0.0 -> 0.25 -> 0.5` seconds. Confirm its value
+   remains in `[0, 1)`; BPM `0` and negative BPM hold it at `0.0`.
+
+## 6. Regression pass
 
 - Run existing unit tests (`ctest` via the `tests` target) and confirm all
   previously passing tests (`test_example_shaders`, `test_preview_camera`,
@@ -97,4 +115,9 @@ Constitution Check ("Verification"). Run after building `shader_editor`
   new tests added for this feature
   (`test_playback_clock`, `test_assimp_model_loader`, and the extended
   cases in `test_shader_file_service`, `test_uniform_introspection`,
-  `test_workspace_models`).
+  `test_workspace_models`). The final implementation passes the complete
+  Debug CTest suite.
+
+## Closure
+
+This quickstart was updated and completed on 2026-09-07 for the closed spec.
