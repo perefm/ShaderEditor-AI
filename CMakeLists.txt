@@ -25,6 +25,7 @@ if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}")
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/glfw3"
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/imgui"
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/glad"
+        "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/assimp"
     )
 endif()
 
@@ -32,6 +33,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
 find_path(STB_IMAGE_INCLUDE_DIR stb_image.h REQUIRED)
 
 add_library(shader_editor_core
@@ -45,6 +47,8 @@ add_library(shader_editor_core
     src/editor/ShaderEditorState.cpp
     src/rendering/geometry/BuiltInPrimitives.cpp
     src/rendering/geometry/PrimitiveLibrary.cpp
+    src/rendering/models/AssimpModelLoader.cpp
+    src/rendering/models/SkeletalAnimator.cpp
     src/rendering/opengl/PreviewRenderer.cpp
     src/rendering/opengl/PreviewCamera.cpp
     src/rendering/shaders/ShaderProgramService.cpp
@@ -61,7 +65,7 @@ add_library(shader_editor_core
 )
 
 target_include_directories(shader_editor_core PUBLIC src third_party ${STB_IMAGE_INCLUDE_DIR})
-target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32)
+target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32 assimp::assimp)
 target_compile_definitions(shader_editor_core PRIVATE
     SHADEREDITOR_VERSION_TIMESTAMP="${SHADEREDITOR_VERSION_TIMESTAMP}"
 )
@@ -85,6 +89,15 @@ if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll"
             "$<TARGET_FILE_DIR:shader_editor>/glfw3.dll"
+    )
+endif()
+
+# Assimp ships as a shared library; copy the matching debug/release DLL beside the executable.
+if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/assimp-vc145-mtd.dll")
+    add_custom_command(TARGET shader_editor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<$<CONFIG:Debug>:${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/assimp-vc145-mtd.dll>$<$<NOT:$<CONFIG:Debug>>:${SHADEREDITOR_VCPKG_INSTALLED_DIR}/bin/assimp-vc145-mt.dll>"
+            "$<TARGET_FILE_DIR:shader_editor>/"
     )
 endif()
 

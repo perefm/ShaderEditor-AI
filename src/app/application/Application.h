@@ -29,7 +29,11 @@ class Application {
     // Example shaders live under the runtime assets folder next to the executable.
     bool loadExampleShaders();
     bool openShaderFromDialog();
+    bool saveShaderAsFromDialog();
     bool openImageForUniform(const std::string& uniformName);
+    // Prompts for a 3D model file (glTF/GLB/FBX/OBJ/etc., anything Assimp supports) and imports
+    // it as the new preview render target.
+    bool openModelFromDialog();
     // Each major tool panel is drawn independently so ImGui docking can rearrange them.
     void drawMainMenu();
     void drawWorkspaceHost();

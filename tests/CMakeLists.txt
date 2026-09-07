@@ -2,10 +2,13 @@ add_library(Catch2WithMain STATIC support/catch_main.cpp)
 target_include_directories(Catch2WithMain PUBLIC ${PROJECT_SOURCE_DIR}/third_party)
 
 add_executable(shader_editor_tests
+    unit/test_assimp_model_loader.cpp
     unit/test_example_shaders.cpp
+    unit/test_playback_clock.cpp
     unit/test_preview_camera.cpp
     unit/test_render_session.cpp
     unit/test_shader_file_service.cpp
+    unit/test_skeletal_animator.cpp
     unit/test_uniform_introspection.cpp
     unit/test_workspace_models.cpp
 )

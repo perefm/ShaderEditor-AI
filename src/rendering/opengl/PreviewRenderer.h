@@ -2,6 +2,8 @@
 
 #include "editor/ShaderPairDocument.h"
 #include "rendering/geometry/PrimitiveLibrary.h"
+#include "rendering/models/ModelDocument.h"
+#include "rendering/models/SkeletalAnimator.h"
 #include "rendering/opengl/PreviewCamera.h"
 #include "rendering/shaders/RenderSession.h"
 #include "rendering/shaders/ShaderProgramService.h"
@@ -9,6 +11,8 @@
 
 #include <glad/glad.h>
 
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -24,12 +28,21 @@ class PreviewRenderer {
     RenderSession updatePreview(const ShaderPairDocument& document,
                                 const std::string& primitiveId,
                                 const std::vector<UniformDefinition>& uniforms);
-    // Draws the current primitive into the preview framebuffer.
+    // Draws the current primitive (or imported model, when session.renderTargetKind == Model)
+    // into the preview framebuffer.
     RenderSession renderFrame(const ShaderPairDocument& document,
                               RenderSession session,
                               const std::vector<UniformDefinition>& uniforms,
                               int width,
                               int height);
+
+    // Makes `document` the active render target as RenderTargetKind::Model. The renderer takes
+    // ownership of the CPU-side mesh data and lazily creates GPU buffers/textures for it the
+    // next time renderFrame() runs. Returns false if the model has no drawable meshes.
+    bool setActiveModel(ModelDocument document);
+    // True once setActiveModel() has been called successfully at least once, so
+    // WorkspaceController::selectModel() can re-activate the cached model without re-importing.
+    [[nodiscard]] bool hasLoadedModel() const { return activeModel_ != nullptr; }
 
   private:
     struct MeshBuffers {
@@ -40,17 +53,31 @@ class PreviewRenderer {
         GLsizei vertexCount {0};
     };
 
+    // GPU handles + CPU vertex/index counts for one imported ModelMesh.
+    struct ModelMeshBuffers {
+        GLuint vao {0};
+        GLuint vertexBuffer {0};
+        GLuint indexBuffer {0};
+        GLsizei indexCount {0};
+    };
+
     void destroyGpuResources();
     bool hasOpenGlContext() const;
     bool ensureProgram(const ShaderPairDocument& document, std::string& errorMessage);
     bool ensureFramebuffer(int width, int height, std::string& errorMessage);
     bool ensureMesh(const PreviewPrimitive& primitive, std::string& errorMessage);
+    bool ensureModelGpuResources(std::string& errorMessage);
     void applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms);
+    // Binds one imported mesh's textures/material colors/bone matrices and issues its draw call.
+    void renderModelMesh(const ModelMesh& mesh, const ModelMeshBuffers& buffers, GLuint program, const std::vector<glm::mat4>& boneTransforms);
     void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height);
+    void beginModelFrame(GLuint program, int width, int height);
+    GLuint textureForPath(const std::filesystem::path& path);
 
     PreviewCamera previewCamera_;
     PrimitiveLibrary library_;
     ShaderProgramService shaderProgramService_;
+    SkeletalAnimator skeletalAnimator_;
     GLuint program_ {0};
     GLuint framebuffer_ {0};
     GLuint colorTexture_ {0};
@@ -61,5 +88,12 @@ class PreviewRenderer {
     std::string compiledFragmentSource_;
     std::unordered_map<std::string, MeshBuffers> meshes_;
     std::unordered_map<std::string, GLuint> textures_;
+
+    // The currently loaded imported model (nullptr if none has been loaded yet) and its GPU
+    // buffers, cached separately from the built-in primitive path (`meshes_`) so switching
+    // between "primitive" and "model" render targets never needs to re-upload either one.
+    std::unique_ptr<ModelDocument> activeModel_;
+    std::vector<ModelMeshBuffers> activeModelBuffers_;
+    bool activeModelGpuResourcesReady_ {false};
 };
 }  // namespace shadereditor
