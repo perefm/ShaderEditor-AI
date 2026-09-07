@@ -51,9 +51,24 @@ TEST_CASE("playback clock reset zeroes elapsed time without touching play state 
 TEST_CASE("playback clock derives beat from elapsed time and bpm") {
     shadereditor::PlaybackClockState clock;
     clock.setBpm(120.0F);
-    clock.advance(30.0F);
-    // 120 bpm = 2 beats/second, so 30 seconds elapsed = 60 beats.
-    REQUIRE(clock.beat() == 60.0F);
+    clock.advance(0.75F);
+    // 120 bpm = 2 beats/second; 0.75 seconds is 1.5 beats, so the normalized phase is 0.5.
+    REQUIRE(clock.beat() == 0.5F);
+    REQUIRE(clock.beat() >= 0.0F);
+    REQUIRE(clock.beat() < 1.0F);
+}
+
+TEST_CASE("playback clock wraps beat phase at every beat boundary") {
+    shadereditor::PlaybackClockState clock;
+    clock.setBpm(120.0F);
+
+    // At 120 BPM, each beat lasts 0.5 seconds. Exact boundaries wrap to zero.
+    clock.advance(0.5F);
+    REQUIRE(clock.beat() == 0.0F);
+    clock.advance(0.25F);
+    REQUIRE(clock.beat() == 0.5F);
+    clock.advance(0.5F);
+    REQUIRE(clock.beat() == 0.5F);
 }
 
 TEST_CASE("playback clock beat is held at zero for non-positive bpm") {

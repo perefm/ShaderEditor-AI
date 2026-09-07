@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 namespace shadereditor {
 // Owns the Play/Pause/Reset transport and the elapsed time that feeds Phoenix's
 // time-based auto-uniforms ("t", "tend", "beat"). Analogous in spirit to
@@ -33,9 +35,16 @@ class PlaybackClockState {
     [[nodiscard]] float sectionDurationSeconds() const { return sectionDurationSeconds_; }
     [[nodiscard]] float bpm() const { return bpm_; }
 
-    // "beat" counts musical beats elapsed since t=0. A non-positive BPM has no meaningful beat
-    // rate, so the value is held at 0 instead of producing NaN/Inf (FR-010).
-    [[nodiscard]] float beat() const { return bpm_ <= 0.0F ? 0.0F : elapsedSeconds_ * bpm_ / 60.0F; }
+    // "beat" is the normalized phase of the current musical beat: 0 at the beat boundary and
+    // approaching 1 immediately before the next one. Wrapping it keeps the Phoenix uniform in
+    // the documented [0, 1) range instead of exposing an ever-growing beat count (FR-010).
+    [[nodiscard]] float beat() const {
+        if (bpm_ <= 0.0F) {
+            return 0.0F;
+        }
+        const float beatsElapsed = elapsedSeconds_ * bpm_ / 60.0F;
+        return beatsElapsed - std::floor(beatsElapsed);
+    }
 
   private:
     bool isPlaying_ {true};
