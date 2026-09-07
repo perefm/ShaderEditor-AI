@@ -539,11 +539,19 @@ void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session
         const glm::vec3 cameraPosition = previewCamera_.position(session.interactionState);
         glUniform3fv(cameraLocation, 1, glm::value_ptr(cameraPosition));
     }
+    const GLint modelLocation = glGetUniformLocation(program, "model");
+    if (modelLocation >= 0) {
+        // Phoenix shaders (bone_animation/bump_mapping/pbr_animation, etc.) declare a "model"
+        // uniform for transforming normals/tangents into world space; like MVP/uCameraPos this
+        // is entirely owned by the preview camera, never user-edited (see FR-012).
+        const glm::mat4 model = previewCamera_.modelMatrix(session.interactionState);
+        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, glm::value_ptr(model));
+    }
 
     int textureUnit = 0;
     for (const auto& uniform : uniforms) {
         const GLint location = glGetUniformLocation(program, uniform.name.c_str());
-        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos") {
+        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos" || uniform.name == "model") {
             continue;
         }
 

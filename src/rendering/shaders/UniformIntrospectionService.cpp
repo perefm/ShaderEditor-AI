@@ -126,7 +126,7 @@ void collectUniforms(const std::string& source, std::vector<UniformDefinition>& 
             if (bracketPosition != std::string::npos) {
                 name.erase(bracketPosition);
             }
-            if (name == "MVP" || name == "uCameraPos") {
+            if (name == "MVP" || name == "uCameraPos" || name == "model") {
                 continue;
             }
             UniformDefinition uniform = makeUniformDefinition(type, name);

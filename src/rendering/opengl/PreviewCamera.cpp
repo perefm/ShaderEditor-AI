@@ -12,6 +12,13 @@ glm::vec3 PreviewCamera::position(const PreviewInteractionState& interactionStat
     return interactionState.panOffset + glm::vec3(0.0F, 0.0F, interactionState.cameraDistance);
 }
 
+glm::mat4 PreviewCamera::modelMatrix(const PreviewInteractionState& interactionState) const {
+    glm::mat4 model = glm::mat4(1.0F);
+    model = glm::rotate(model, interactionState.orbitAngles.x, glm::vec3(0.0F, 1.0F, 0.0F));
+    model = glm::rotate(model, interactionState.orbitAngles.y, glm::vec3(1.0F, 0.0F, 0.0F));
+    return model;
+}
+
 glm::mat4 PreviewCamera::viewProjection(const PreviewInteractionState& interactionState, float aspectRatio) const {
     const float safeAspectRatio = aspectRatio > 0.0F ? aspectRatio : 1.0F;
     // Near/far clip planes scale with sceneScale so imported models much larger or smaller than
@@ -26,10 +33,6 @@ glm::mat4 PreviewCamera::viewProjection(const PreviewInteractionState& interacti
     const glm::vec3 eye = position(interactionState);
     glm::mat4 view = glm::lookAt(eye, target, glm::vec3(0.0F, 1.0F, 0.0F));
 
-    glm::mat4 model = glm::mat4(1.0F);
-    model = glm::rotate(model, interactionState.orbitAngles.x, glm::vec3(0.0F, 1.0F, 0.0F));
-    model = glm::rotate(model, interactionState.orbitAngles.y, glm::vec3(1.0F, 0.0F, 0.0F));
-
-    return projection * view * model;
+    return projection * view * modelMatrix(interactionState);
 }
 }  // namespace shadereditor

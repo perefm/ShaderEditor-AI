@@ -42,3 +42,17 @@ TEST_CASE("uniform introspection recognizes Phoenix auto-uniforms as read-only")
         REQUIRE(!uniform.editable);
     }
 }
+
+TEST_CASE("uniform introspection excludes engine-owned MVP/uCameraPos/model uniforms entirely") {
+    shadereditor::ShaderPairDocument document;
+    // "model" (per-frame orbit rotation matrix) is engine-owned exactly like MVP/uCameraPos: it
+    // must never be surfaced to the Uniforms panel at all (not even as a read-only row), since
+    // the user has no meaningful value to inspect or edit for it.
+    document.vertexSource = "uniform mat4 MVP; uniform vec3 uCameraPos; uniform mat4 model; uniform vec2 u_offset; void main(){}";
+
+    shadereditor::UniformIntrospectionService introspection;
+    const auto uniforms = introspection.discover(document);
+
+    REQUIRE(uniforms.size() == 1);
+    REQUIRE(uniforms.front().name == "u_offset");
+}
