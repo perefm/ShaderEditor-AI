@@ -69,7 +69,15 @@ if(WIN32)
     target_link_libraries(shader_editor_core PUBLIC comdlg32)
 endif()
 
-add_executable(shader_editor src/app/application/main.cpp)
+if(WIN32)
+    add_executable(shader_editor WIN32
+        src/app/application/main.cpp
+        resources/shader_editor.rc
+        resources/shader_editor.ico
+    )
+else()
+    add_executable(shader_editor src/app/application/main.cpp)
+endif()
 target_link_libraries(shader_editor PRIVATE shader_editor_core)
 
 if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll")
