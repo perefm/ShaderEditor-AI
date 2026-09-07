@@ -174,6 +174,8 @@ bool Application::initialize() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    imguiIniPath_ = (executableDirectory() / "imgui.ini").string();
+    io.IniFilename = imguiIniPath_.c_str();
 #ifdef IMGUI_HAS_DOCK
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 #else

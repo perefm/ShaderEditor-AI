@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 -> 3.0.0
+- Version change: 3.0.0 -> 3.1.0
 - Modified principles:
   - I. Windows Compatibility First -> I. Cross-Platform Compatibility First
   - II. Basic Verification Required -> II. Basic Verification Required
@@ -53,6 +53,12 @@ Changes SHOULD be scoped so they are easy to review and easy to roll back.
 Unrelated cleanup MUST be avoided unless it is necessary for the task.
 Rationale: smaller changes reduce risk in a lightweight workflow.
 
+### VI. User-Owned Commits
+The assistant MUST NOT create, amend, or push Git commits in this repository.
+Changes MUST remain in the working tree for the user to inspect, stage, and
+commit themselves. Rationale: the user owns project history and commit
+boundaries.
+
 ## Platform Requirements
 
 - Specifications and plans MUST identify the supported platforms affected by the
@@ -70,6 +76,8 @@ Rationale: smaller changes reduce risk in a lightweight workflow.
 3. Create tasks that include implementation and at least one verification step.
 4. Before merge, confirm the app still builds and the changed workflow works on
    the intended supported platforms.
+5. The assistant MUST leave commit creation, amendment, staging, and pushing to
+   the user.
 
 ## Governance
 
@@ -84,4 +92,4 @@ clarifications.
 Compliance review is lightweight: each change MUST confirm platform
 compatibility, verification method, and rendering impact when applicable.
 
-**Version**: 3.0.0 | **Ratified**: 2026-04-11 | **Last Amended**: 2026-04-11
+**Version**: 3.1.0 | **Ratified**: 2026-04-11 | **Last Amended**: 2026-09-07

@@ -70,5 +70,7 @@ class Application {
     bool showShaderHelp_ {false};
     TextEditor shaderEditor_;
     std::string shaderEditorText_;
+    // Dear ImGui persists its dock layout beside the executable, never in the runtime assets tree.
+    std::string imguiIniPath_;
 };
 }  // namespace shadereditor
