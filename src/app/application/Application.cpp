@@ -418,7 +418,9 @@ void Application::drawShaderEditorWindow() {
             shaderEditor_.SetText(source);
             shaderEditorText_ = source;
         }
-        shaderEditor_.Render("##phoenix-source", ImVec2(-FLT_MIN, 460.0F), true);
+        ImVec2 editorSize = ImGui::GetContentRegionAvail();
+        editorSize.y = std::max(1.0F, editorSize.y);
+        shaderEditor_.Render("##phoenix-source", editorSize, true);
         const std::string editedSource = shaderEditor_.GetText();
         if (editedSource != source) {
             shaderEditorText_ = editedSource;
