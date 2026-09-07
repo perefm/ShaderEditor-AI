@@ -47,6 +47,11 @@ class PreviewRenderer {
     // model has no animations), in the same order as ModelDocument::animations / RenderSession's
     // selectedAnimationIndex, so panels can populate an animation picker.
     [[nodiscard]] std::vector<std::string> activeModelAnimationNames() const;
+    // Returns the cached model's bind-pose bounding radius so WorkspaceController can restore
+    // model-proportional camera framing after temporarily switching to a primitive.
+    [[nodiscard]] float activeModelBoundingRadius() const {
+        return activeModel_ == nullptr ? 0.0F : activeModel_->boundingRadius();
+    }
 
   private:
     struct MeshBuffers {

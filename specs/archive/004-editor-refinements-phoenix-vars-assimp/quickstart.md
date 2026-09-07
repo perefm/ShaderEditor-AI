@@ -84,7 +84,8 @@ Constitution Check ("Verification"). Run after building `shader_editor`
    selector; verify the Render View switches back to the primitive.
 6. Re-select the model as the render target (new `selectModel()`-style
    action); verify it reappears without needing to re-open the file (no
-   re-import delay).
+   re-import delay) and that its original AABB-based camera framing is
+   restored.
 7. Open a different shader file (not a new model) while the model is
    selected as the render target; verify the model stays loaded and the new
    shader is applied to it.

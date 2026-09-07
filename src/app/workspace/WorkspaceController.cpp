@@ -164,6 +164,11 @@ bool WorkspaceController::selectModel() {
         return false;
     }
     renderSession_.renderTargetKind = RenderTargetKind::Model;
+    // Re-apply the cached model's scale after a primitive selection restored the primitive
+    // defaults. This keeps the original AABB-based framing when switching back without loading
+    // the model again.
+    const float boundingRadius = previewRenderer_.activeModelBoundingRadius();
+    renderSession_.interactionState.setSceneScale(boundingRadius > 0.0F ? boundingRadius : 1.0F);
     return updateShaders();
 }
 
