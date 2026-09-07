@@ -38,6 +38,22 @@ TEST_CASE("AssimpModelLoader imports the bundled animated Fox model") {
     }
     REQUIRE(foundDiffuseTexture);
 
+    // Fox's glTF mesh must carry real UVs; a zeroed TEXCOORD_0 stream would make a correctly
+    // loaded image appear as a single sampled texel across the whole model.
+    bool foundNonZeroUv = false;
+    for (const auto& mesh : result.document.meshes) {
+        for (const auto& vertex : mesh.vertices) {
+            if (vertex.texCoords.x != 0.0F || vertex.texCoords.y != 0.0F) {
+                foundNonZeroUv = true;
+                break;
+            }
+        }
+        if (foundNonZeroUv) {
+            break;
+        }
+    }
+    REQUIRE(foundNonZeroUv);
+
     // Every vertex's bone weights must be within the fixed-size Phoenix-compatible layout.
     for (const auto& mesh : result.document.meshes) {
         for (const auto& vertex : mesh.vertices) {
@@ -61,6 +77,33 @@ TEST_CASE("AssimpModelLoader imports the bundled animated CesiumMan (PBR) model"
     REQUIRE(result.document.hasSkeleton);
     REQUIRE(result.document.boneCount > 0);
     REQUIRE(!result.document.animations.empty());
+}
+
+TEST_CASE("AssimpModelLoader imports the bundled normal-map bump sample") {
+    shadereditor::AssimpModelLoader loader;
+    const auto result = loader.load(modelPath("NormalTangentTest/NormalTangentTest.glb"));
+
+    REQUIRE(result.success);
+    REQUIRE(!result.document.meshes.empty());
+
+    bool foundNormalMap = false;
+    bool foundGeneratedTangent = false;
+    for (const auto& mesh : result.document.meshes) {
+        for (const auto& slot : mesh.material.textureSlots) {
+            if (slot.shaderUniformName == "texture_normal1") {
+                foundNormalMap = true;
+                REQUIRE(!slot.embeddedImageData.empty());
+            }
+        }
+        for (const auto& vertex : mesh.vertices) {
+            if (glm::length(vertex.tangent) > 0.001F && glm::length(vertex.biTangent) > 0.001F) {
+                foundGeneratedTangent = true;
+                break;
+            }
+        }
+    }
+    REQUIRE(foundNormalMap);
+    REQUIRE(foundGeneratedTangent);
 }
 
 TEST_CASE("AssimpModelLoader reports a readable error for a missing file") {

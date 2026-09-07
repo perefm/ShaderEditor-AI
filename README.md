@@ -26,7 +26,8 @@ tool panels in a dockable Dear ImGui layout.
 - GLM-based math pipeline for preview transforms and uniform upload
 - Phoenix-compatible engine-provided shader uniforms and vertex attributes
 - Bundled model shader examples, including `bone_animation.glsl`,
-  `bone_animation_material_only.glsl`, `bump_mapping.glsl`, and `pbr_animation.glsl`
+  `bone_animation_material_only.glsl`, `bump_mapping.glsl`,
+  `bone_animation_bump_mapping.glsl`, and `pbr_animation.glsl`
 
 ### Engine-provided uniforms
 
@@ -50,6 +51,12 @@ uniforms in the `Uniforms` panel:
 - `texture_*` sampler uniforms such as `texture_diffuse1`,
   `texture_specular1`, `texture_normals1`, and `texture_height1`: active mesh
   texture slots, loaded from external files or embedded model images.
+
+The bundled `assets/models/NormalTangentTest/NormalTangentTest.glb` is a
+royalty-free Khronos CC0 sample with embedded normal maps. Use it with
+`bump_mapping.glsl` to validate tangent-space bump mapping. The
+`bone_animation_bump_mapping.glsl` example combines the same normal mapping
+with Phoenix-compatible skinning and can also be used with animated models.
 
 Imported model vertex attributes follow the Phoenix mesh layout:
 `aPos` (0), `aNormal` (1), `aTexCoords` (2), `aTangent` (3),

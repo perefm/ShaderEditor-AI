@@ -476,6 +476,10 @@ GLuint PreviewRenderer::textureForPath(const std::filesystem::path& path) {
     int width = 0;
     int height = 0;
     int channels = 0;
+    // glTF/Assimp UV coordinates use a top-left image origin, while OpenGL samples texture
+    // rows from the bottom. Flip decoded image data once so model UVs remain unchanged and
+    // external and embedded textures use the same convention.
+    stbi_set_flip_vertically_on_load(1);
     stbi_uc* pixels = stbi_load(key.c_str(), &width, &height, &channels, 4);
     if (pixels == nullptr) {
         return 0;
@@ -501,6 +505,7 @@ GLuint PreviewRenderer::textureForEmbeddedData(const std::vector<unsigned char>&
     int width = 0;
     int height = 0;
     int channels = 0;
+    stbi_set_flip_vertically_on_load(1);
     stbi_uc* pixels = stbi_load_from_memory(encodedBytes.data(), static_cast<int>(encodedBytes.size()), &width, &height, &channels, 4);
     if (pixels == nullptr) {
         return 0;
