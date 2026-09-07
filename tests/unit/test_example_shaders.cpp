@@ -7,13 +7,12 @@
 TEST_CASE("example shaders can be loaded from assets") {
     shadereditor::ShaderFileService service;
     const auto root = std::filesystem::path(SHADEREDITOR_SOURCE_DIR);
-    const auto vertex = root / "assets" / "shaders" / "basic.vert";
-    const auto fragment = root / "assets" / "shaders" / "basic.frag";
+    const auto shader = root / "assets" / "shaders" / "basic.glsl";
 
-    const auto document = service.load(vertex, fragment);
+    const auto document = service.load(shader);
 
-    REQUIRE(document.vertexPath == vertex);
-    REQUIRE(document.fragmentPath == fragment);
+    REQUIRE(document.shaderPath.has_value());
+    REQUIRE(document.shaderPath.value() == shader);
     REQUIRE(!document.vertexSource.empty());
     REQUIRE(!document.fragmentSource.empty());
 }

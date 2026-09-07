@@ -30,10 +30,6 @@
 
 namespace shadereditor {
 namespace {
-bool hasPanel(const std::vector<std::string>& panels, const char* panelId) {
-    return std::find(panels.begin(), panels.end(), panelId) != panels.end();
-}
-
 std::string formatShaderSource(const std::string& source) {
     std::istringstream input(source);
     std::ostringstream output;
@@ -161,14 +157,6 @@ bool Application::initialize() {
     const std::filesystem::path runtimeAssetsDirectory = executableDirectory() / "assets" / "shaders";
     exampleShaderPath_ = runtimeAssetsDirectory / "basic.glsl";
     pixelLightingShaderPath_ = runtimeAssetsDirectory / "pixel_lighting.glsl";
-    const auto layoutPath = std::filesystem::path("build") / "layout.txt";
-    if (std::filesystem::exists(layoutPath)) {
-        layoutState_ = layoutPersistence_.load(layoutPath);
-    } else {
-        layoutState_.setOpenPanels({"shader-editor", "render-view", "uniforms", "diagnostics", "shader-errors"});
-        layoutState_.setFocusedPanel("shader-editor");
-    }
-    restorePanelVisibility();
     diagnostics_.addInfo("Runtime assets directory: " + runtimeAssetsDirectory.string());
     loadExampleShaders();
     diagnostics_.addInfo("Application initialized.");
@@ -177,7 +165,6 @@ bool Application::initialize() {
 
 int Application::run() {
     diagnostics_.addInfo("Using backend: " + windowContext_.backend());
-    diagnostics_.addInfo("Dockable panels registered: " + std::to_string(layoutState_.openPanels().size()));
     diagnostics_.addInfo("Application running.");
 
     while (!glfwWindowShouldClose(windowContext_.window())) {
@@ -203,9 +190,6 @@ int Application::run() {
 }
 
 void Application::shutdown() {
-    std::filesystem::create_directories("build");
-    storePanelVisibility();
-    layoutPersistence_.save(layoutState_, std::filesystem::path("build") / "layout.txt");
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -281,40 +265,6 @@ bool Application::openImageForUniform(const std::string& uniformName) {
     diagnostics_.addError("Native file dialogs are only implemented for Windows in this build.");
     return false;
 #endif
-}
-
-void Application::restorePanelVisibility() {
-    const auto& openPanels = layoutState_.openPanels();
-    showShaderEditor_ = hasPanel(openPanels, "shader-editor");
-    showRenderView_ = hasPanel(openPanels, "render-view");
-    showUniforms_ = hasPanel(openPanels, "uniforms");
-    showDiagnostics_ = hasPanel(openPanels, "diagnostics");
-    showShaderErrors_ = hasPanel(openPanels, "shader-errors");
-    showShaderHelp_ = hasPanel(openPanels, "shader-help");
-}
-
-void Application::storePanelVisibility() {
-    std::vector<std::string> openPanels;
-    if (showShaderEditor_) {
-        openPanels.emplace_back("shader-editor");
-    }
-    if (showRenderView_) {
-        openPanels.emplace_back("render-view");
-    }
-    if (showUniforms_) {
-        openPanels.emplace_back("uniforms");
-    }
-    if (showDiagnostics_) {
-        openPanels.emplace_back("diagnostics");
-    }
-    if (showShaderErrors_) {
-        openPanels.emplace_back("shader-errors");
-    }
-    if (showShaderHelp_) {
-        openPanels.emplace_back("shader-help");
-    }
-
-    layoutState_.setOpenPanels(std::move(openPanels));
 }
 
 void Application::drawMainMenu() {

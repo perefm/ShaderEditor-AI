@@ -42,7 +42,6 @@ add_library(shader_editor_core
     src/app/workspace/UniformState.cpp
     src/app/workspace/PreviewInteractionState.cpp
     src/app/workspace/WorkspaceController.cpp
-    src/app/workspace/WorkspaceLayoutState.cpp
     src/editor/ShaderEditorState.cpp
     src/rendering/geometry/BuiltInPrimitives.cpp
     src/rendering/geometry/PrimitiveLibrary.cpp
@@ -52,7 +51,6 @@ add_library(shader_editor_core
     src/rendering/shaders/UniformIntrospectionService.cpp
     src/services/files/ShaderFileService.cpp
     src/services/shaders/PhoenixShaderParser.cpp
-    src/services/persistence/LayoutPersistenceService.cpp
     src/ui/dockspace/DockspaceHost.cpp
     src/ui/panels/DiagnosticsPanel.cpp
     src/ui/panels/RenderViewPanel.cpp

@@ -30,7 +30,7 @@ implementation and testing of each story.
 - [X] T003 [P] Create VS Code build and debug tasks in .vscode/tasks.json
 - [X] T004 [P] Create VS Code launch configuration in .vscode/launch.json
 - [X] T005 [P] Add project workspace defaults in .vscode/settings.json
-- [X] T006 [P] Create asset directory placeholders for built-in resources in assets/primitives/.gitkeep and assets/shaders/.gitkeep
+- [X] T006 [P] Create the shader asset directory placeholder in assets/shaders/.gitkeep
 
 ---
 
