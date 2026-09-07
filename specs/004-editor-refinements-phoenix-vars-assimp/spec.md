@@ -190,6 +190,72 @@ name Phoenix uses (`gBones`).
    (not discarded) so selecting "model" as the render target again shows it
    without re-importing.
 
+---
+
+### User Story 5 - Bundled sample assets prove animation and bump mapping work out of the box (Priority: P2)
+
+As a shader author trying ShaderEditor for the first time, I want the app to
+ship with a ready-to-use example shader that animates an Assimp-imported
+skinned model, another example shader that demonstrates bump mapping, and a
+third example shader that combines skeletal animation with PBR
+(metallic-roughness) shading, plus small, royalty-free, textured and animated
+sample 3D models to exercise them, so I can verify User Stories 3 and 4 work
+correctly without having to source my own models or write skinning/bump/PBR
+shaders from scratch first.
+
+**Why this priority**: Without bundled examples, User Stories 3 and 4 are
+difficult to verify or demo — a user (or reviewer) would need to find their
+own compatible model and write compatible shaders first. This story is the
+concrete, runnable proof that the rest of the feature works.
+
+**Independent Test**: Fresh checkout/build of the app; without downloading
+anything else, use File → Open Shader... to open the bundled bone-animation
+example shader and File → Open Model... to open the bundled sample model;
+confirm the model renders textured and animated. Separately open the bundled
+bump-mapping example shader against the same (or a primitive) target and
+confirm visible surface relief. Separately open the bundled PBR-animation
+example shader against the bundled PBR sample model and confirm it renders
+textured, animated, and with metallic/roughness-driven shading distinct from
+the plain diffuse lighting used elsewhere.
+
+**Acceptance Scenarios**:
+
+1. **Given** a fresh build of ShaderEditor, **When** the user browses the
+   runtime assets shaders folder, **Then** at least one example shader
+   declares and uses the bone/skinning attributes and the `gBones` uniform
+   from User Story 4 (FR-017/FR-018), and at least one other example shader
+   implements a bump/normal-mapping lighting technique.
+2. **Given** a fresh build of ShaderEditor, **When** the user browses the
+   runtime assets models folder, **Then** at least one small (order of a few
+   hundred KB or less), textured, skeletally-animated 3D model file is
+   present in a format Assimp/the app's Open Model dialog supports, ideally
+   `.glb`.
+3. **Given** the bundled sample model and the bundled bone-animation example
+   shader, **When** the user opens the model then applies the shader (or vice
+   versa) and presses Play, **Then** the model renders with its texture
+   mapped and its animation visibly playing, using the exact Phoenix uniform
+   names from FR-015–FR-018.
+4. **Given** the bundled bump-mapping example shader, **When** it is applied
+   to the bundled sample model or a built-in primitive, **Then** the rendered
+   surface visibly shows relief/shading detail beyond flat per-pixel diffuse
+   lighting (e.g., via a normal map texture or a procedurally derived bump
+   from an existing texture, since not every sample asset ships a dedicated
+   normal map).
+5. **Given** the bundled sample model's license, **When** it is redistributed
+   inside this repository's assets, **Then** it MUST be royalty-free for this
+   use and any required attribution MUST be included alongside the asset
+   (e.g., a README next to the model file).
+6. **Given** the bundled PBR sample model and the bundled PBR-animation
+   example shader, **When** the user opens the model then applies the shader
+   and presses Play, **Then** the model renders textured and animated, and
+   its shading responds to metallic/roughness input (either dedicated
+   metalness/roughness textures or scalar factors) in a way visibly different
+   from the non-PBR lighting used by the other example shaders.
+7. **Given** the bundled PBR sample model's license, **When** it is
+   redistributed inside this repository's assets, **Then** it MUST be
+   royalty-free for this use and any required attribution MUST be included
+   alongside the asset.
+
 ### Edge Cases
 
 - What happens when the user does "Save As" over a file that already exists
@@ -209,6 +275,10 @@ name Phoenix uses (`gBones`).
 - What happens on each supported platform (Windows-only today) when the
   Assimp/model file or its textures are not available or permissions are
   denied?
+- What happens when a PBR model's glTF material has no dedicated
+  metalness/roughness texture (only scalar factors)? The bundled PBR example
+  shader MUST fall back to the scalar `metallicFactor`/`roughnessFactor`
+  uniforms rather than failing or rendering as fully black/white.
 - Could this feature break OpenGL context setup, shader/resource loading, or
   UI responsiveness during normal use? Loading large animated models must not
   block the render loop; long imports should not freeze the UI thread beyond
@@ -302,6 +372,32 @@ name Phoenix uses (`gBones`).
 - **FR-023**: System MUST avoid breaking the OpenGL rendering lifecycle or
   leaving the main UI unresponsive during normal use, including while loading
   large animated models.
+- **FR-024**: The repository's runtime shader assets (`assets/shaders/`)
+  MUST include at least one example shader demonstrating skeletal animation
+  via the `gBones` uniform and `aBoneID`/`aBoneWeight` vertex attributes
+  (FR-017/FR-018), and at least one example shader demonstrating bump/normal
+  mapping (tangent-space normal map sampling, or a procedurally derived bump
+  when no dedicated normal map asset is bundled).
+- **FR-025**: The repository's runtime assets MUST include at least one
+  small, textured, skeletally-animated 3D model file (target: a few hundred
+  KB or less, `.glb` preferred) that is royalty-free for redistribution in
+  this repository, with any required attribution recorded alongside the
+  asset (e.g., a README in the same folder).
+- **FR-026**: The bundled example shaders and the bundled sample model MUST
+  be usable together to manually verify User Stories 3 and 4 end-to-end
+  (textured + animated rendering) without requiring the user to source any
+  additional files.
+- **FR-027**: The repository's runtime assets MUST include at least one
+  example shader that combines skeletal animation (the same `gBones`/
+  `aBoneID`/`aBoneWeight` attributes from FR-017/FR-018) with a
+  metallic-roughness PBR lighting model (using dedicated
+  metalness/roughness textures when present, falling back to scalar
+  `metallicFactor`/`roughnessFactor` uniforms otherwise).
+- **FR-028**: The repository's runtime assets MUST include at least one
+  small, textured, skeletally-animated 3D model file whose material uses
+  glTF's `pbrMetallicRoughness` model (target: under 1 MB, `.glb` preferred)
+  that is royalty-free for redistribution in this repository, with any
+  required attribution recorded alongside the asset.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -332,14 +428,27 @@ name Phoenix uses (`gBones`).
   visual state and Reset returning it to the `t=0` appearance.
 - **SC-004**: Editing the BPM or section-duration fields updates the rendered
   output on the next frame with no need to reopen or re-save the shader.
-- **SC-005**: A sample rigged, textured, animated model (e.g., a simple biped
-  with a diffuse texture and a walk animation) loads, displays correctly
-  textured, and animates when previewed with a Phoenix-style skinning shader,
-  with texture and bone uniform names matching Phoenix's own drawScene output
-  byte-for-byte (same uniform name strings).
+- **SC-005**: The bundled sample model (`assets/models/Fox/Fox.glb`, a small
+  rigged, textured, animated fox with Walk/Run/Survey animation clips) loads,
+  displays correctly textured, and animates when previewed with the bundled
+  `assets/shaders/bone_animation.glsl` example shader, with texture and bone
+  uniform names matching Phoenix's own drawScene output byte-for-byte (same
+  uniform name strings).
 - **SC-006**: The Render View keeps a valid render loop and remains responsive
   (no UI freeze beyond a brief, expected load time) while importing the
-  largest sample model exercised in testing.
+  bundled sample model (~159 KB) or any larger sample model exercised in
+  testing.
+- **SC-007**: The bundled `assets/shaders/bump_mapping.glsl` example shader
+  produces visibly different, relief-shaded output compared to the existing
+  flat-lit `pixel_lighting.glsl` example when applied to the same primitive
+  or model.
+- **SC-008**: The bundled `assets/models/CesiumMan/CesiumMan.glb` sample model
+  (a small, textured, skeletally-animated character with a
+  `pbrMetallicRoughness` material) loads, displays correctly textured, and
+  animates when previewed with the bundled
+  `assets/shaders/pbr_animation.glsl` example shader, producing visibly
+  different shading than the non-PBR example shaders when the light or
+  camera position changes.
 
 ## Assumptions
 
@@ -364,3 +473,18 @@ name Phoenix uses (`gBones`).
 - Switching back to a built-in preview primitive after a model is loaded
   reuses the existing primitive selector; the model stays loaded in memory
   and can be re-selected as the render target without re-importing.
+- The bundled sample model is
+  [Fox](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox)
+  from the Khronos `glTF-Sample-Assets` repository (`Fox.glb`, ~159 KB),
+  licensed CC0 (model) plus CC-BY 4.0 (rigging/animation and glTF conversion);
+  it is royalty-free and redistributable in this repository provided the
+  CC-BY attribution is kept alongside the asset (see
+  `assets/models/Fox/README.md`). It does not ship a dedicated normal map, so
+  the bundled bump-mapping example shader also supports a procedurally
+  derived bump technique as a fallback, per FR-024.
+- The bundled PBR sample model is
+  [Cesium Man](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan)
+  from the Khronos `glTF-Sample-Assets` repository (`CesiumMan.glb`, ~438 KB),
+  licensed CC-BY 4.0; it is royalty-free and redistributable in this
+  repository provided the CC-BY attribution is kept alongside the asset (see
+  `assets/models/CesiumMan/README.md`).

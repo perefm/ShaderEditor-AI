@@ -28,7 +28,12 @@ color/scalar properties using Phoenix's exact uniform naming
 uploading skeletal animation as a `gBones` mat4 array driven by the same
 playback clock, with oversized-bone meshes split via Assimp's
 `aiProcess_SplitByBoneCount`, matching Phoenix's `drawScene` section
-behavior.
+behavior; (5) bundle runtime example assets proving (3) and (4) work
+out of the box: a bone-animation example shader, a bump-mapping example
+shader, a PBR (metallic-roughness) animation example shader, a small
+royalty-free animated/textured sample model (`assets/models/Fox/Fox.glb`),
+and a small royalty-free animated sample model with a
+`pbrMetallicRoughness` material (`assets/models/CesiumMan/CesiumMan.glb`).
 
 ## Technical Context
 
@@ -90,6 +95,19 @@ specs/004-editor-refinements-phoenix-vars-assimp/
 ### Source Code (repository root)
 
 ```text
+assets/
+├── shaders/
+│   ├── bone_animation.glsl          # NEW: example shader for Assimp skinned-mesh animation (gBones, aBoneID/aBoneWeight)
+│   ├── bump_mapping.glsl            # NEW: example shader demonstrating bump/normal mapping
+│   └── pbr_animation.glsl           # NEW: example shader combining skinning with metallic-roughness PBR shading
+└── models/                          # NEW subdirectory
+    ├── Fox/
+    │   ├── Fox.glb                  # NEW: bundled sample rigged/textured/animated model (Khronos glTF-Sample-Assets, CC0 + CC-BY)
+    │   └── README.md                # NEW: license/attribution notice for Fox.glb
+    └── CesiumMan/
+        ├── CesiumMan.glb            # NEW: bundled sample rigged/textured/animated PBR model (Khronos glTF-Sample-Assets, CC-BY 4.0)
+        └── README.md                # NEW: license/attribution notice for CesiumMan.glb
+
 src/
 ├── app/
 │   ├── application/
