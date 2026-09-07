@@ -12,6 +12,8 @@ void RenderViewPanel::orbit(const glm::vec2& delta) {
 
 void RenderViewPanel::pan(const glm::vec2& delta) { controller_.panPreview(delta); }
 
+void RenderViewPanel::zoom(float wheelDelta) { controller_.zoomPreview(wheelDelta); }
+
 void RenderViewPanel::resetView() { controller_.resetPreviewInteraction(); }
 
 const RenderSession& RenderViewPanel::renderPreview(int width, int height) { return controller_.renderPreview(width, height); }

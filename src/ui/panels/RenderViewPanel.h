@@ -14,6 +14,7 @@ class RenderViewPanel {
     void choosePrimitive(const std::string& primitiveId);
     void orbit(const glm::vec2& delta);
     void pan(const glm::vec2& delta);
+    void zoom(float wheelDelta);
     void resetView();
     const RenderSession& renderPreview(int width, int height);
     [[nodiscard]] std::string summary() const;

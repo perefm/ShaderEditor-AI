@@ -30,20 +30,57 @@
 
 namespace shadereditor {
 namespace {
-constexpr ImGuiInputTextFlags kShaderEditorFlags = ImGuiInputTextFlags_AllowTabInput;
+std::string formatShaderSource(const std::string& source) {
+    std::istringstream input(source);
+    std::ostringstream output;
+    std::string line;
+    int indent = 0;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        const auto first = line.find_first_not_of(" \t");
+        const std::string trimmed = first == std::string::npos ? std::string {} : line.substr(first);
+        if (trimmed.empty()) {
+            continue;
+        }
+        if (trimmed.rfind("#type ", 0) == 0) {
+            indent = 0;
+            if (trimmed == "#type fragment" && output.tellp() > std::streampos(0)) {
+                output << "\n\n";
+            }
+            output << trimmed << '\n';
+            continue;
+        }
 
-bool hasPanel(const std::vector<std::string>& panels, const char* panelId) {
-    return std::find(panels.begin(), panels.end(), panelId) != panels.end();
-}
-
-bool editMultilineString(const char* label, std::string& value, float height) {
-    std::vector<char> buffer(value.begin(), value.end());
-    buffer.resize(std::max<std::size_t>(buffer.size() + 4096, 4096), '\0');
-    const bool changed = ImGui::InputTextMultiline(label, buffer.data(), buffer.size(), ImVec2(-FLT_MIN, height), kShaderEditorFlags);
-    if (changed) {
-        value.assign(buffer.data());
+        std::string chunk;
+        auto emitChunk = [&]() {
+            const auto chunkStart = chunk.find_first_not_of(" \t");
+            if (chunkStart != std::string::npos) {
+                output << std::string(static_cast<std::size_t>(indent) * 4U, ' ')
+                       << chunk.substr(chunkStart) << '\n';
+            }
+            chunk.clear();
+        };
+        for (const char character : trimmed) {
+            if (character == '{') {
+                emitChunk();
+                output << std::string(static_cast<std::size_t>(indent) * 4U, ' ') << "{" << '\n';
+                ++indent;
+            } else if (character == '}') {
+                emitChunk();
+                indent = std::max(0, indent - 1);
+                output << std::string(static_cast<std::size_t>(indent) * 4U, ' ') << "}" << '\n';
+            } else if (character == ';') {
+                chunk += character;
+                emitChunk();
+            } else {
+                chunk += character;
+            }
+        }
+        emitChunk();
     }
-    return changed;
+    return output.str();
 }
 
 std::filesystem::path executableDirectory() {
@@ -66,19 +103,24 @@ std::filesystem::path executableDirectory() {
 }
 
 #ifdef _WIN32
-std::optional<std::filesystem::path> openShaderPathDialog(const char* title, const char* filter) {
-    char pathBuffer[MAX_PATH] = {};
-    OPENFILENAMEA dialog {};
+std::optional<std::filesystem::path> openFileDialog(
+    const wchar_t* title,
+    const wchar_t* filter,
+    const std::filesystem::path& initialDirectory) {
+    std::vector<wchar_t> pathBuffer(32768, L'\0');
+    OPENFILENAMEW dialog {};
     dialog.lStructSize = sizeof(dialog);
     dialog.lpstrTitle = title;
     dialog.lpstrFilter = filter;
-    dialog.lpstrFile = pathBuffer;
-    dialog.nMaxFile = MAX_PATH;
+    dialog.lpstrFile = pathBuffer.data();
+    dialog.nMaxFile = static_cast<DWORD>(pathBuffer.size());
+    const std::wstring initialDirectoryString = initialDirectory.wstring();
+    dialog.lpstrInitialDir = initialDirectoryString.c_str();
     dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-    if (!GetOpenFileNameA(&dialog)) {
+    if (!GetOpenFileNameW(&dialog)) {
         return std::nullopt;
     }
-    return std::filesystem::path(pathBuffer);
+    return std::filesystem::path(pathBuffer.data());
 }
 #endif
 }
@@ -89,10 +131,13 @@ Application::Application()
       renderViewPanel_(workspace_),
       uniformsPanel_(workspace_),
       diagnosticsPanel_(diagnostics_),
-      shaderErrorsPanel_(diagnostics_) {}
+      shaderErrorsPanel_(diagnostics_) {
+    shaderEditor_.SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
+}
 
 bool Application::initialize() {
-    if (!windowContext_.initialize()) {
+    const std::string windowTitle = "Phoenix GLSL shader editor v." SHADEREDITOR_VERSION_TIMESTAMP;
+    if (!windowContext_.initialize(1600, 900, windowTitle.c_str())) {
         return false;
     }
 
@@ -106,20 +151,12 @@ bool Application::initialize() {
 #endif
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(windowContext_.window(), true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplOpenGL3_Init("#version 460");
 
     registerPanels();
     const std::filesystem::path runtimeAssetsDirectory = executableDirectory() / "assets" / "shaders";
-    exampleVertexPath_ = runtimeAssetsDirectory / "basic.vert";
-    exampleFragmentPath_ = runtimeAssetsDirectory / "basic.frag";
-    const auto layoutPath = std::filesystem::path("build") / "layout.txt";
-    if (std::filesystem::exists(layoutPath)) {
-        layoutState_ = layoutPersistence_.load(layoutPath);
-    } else {
-        layoutState_.setOpenPanels({"shader-editor", "render-view", "uniforms", "diagnostics", "shader-errors"});
-        layoutState_.setFocusedPanel("shader-editor");
-    }
-    restorePanelVisibility();
+    exampleShaderPath_ = runtimeAssetsDirectory / "basic.glsl";
+    pixelLightingShaderPath_ = runtimeAssetsDirectory / "pixel_lighting.glsl";
     diagnostics_.addInfo("Runtime assets directory: " + runtimeAssetsDirectory.string());
     loadExampleShaders();
     diagnostics_.addInfo("Application initialized.");
@@ -128,7 +165,6 @@ bool Application::initialize() {
 
 int Application::run() {
     diagnostics_.addInfo("Using backend: " + windowContext_.backend());
-    diagnostics_.addInfo("Dockable panels registered: " + std::to_string(layoutState_.openPanels().size()));
     diagnostics_.addInfo("Application running.");
 
     while (!glfwWindowShouldClose(windowContext_.window())) {
@@ -154,9 +190,6 @@ int Application::run() {
 }
 
 void Application::shutdown() {
-    std::filesystem::create_directories("build");
-    storePanelVisibility();
-    layoutPersistence_.save(layoutState_, std::filesystem::path("build") / "layout.txt");
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -184,71 +217,54 @@ void Application::drawUi() {
     drawUniformsWindow();
     drawDiagnosticsWindow();
     drawShaderErrorsWindow();
+    drawShaderHelpWindow();
 }
 
 bool Application::loadExampleShaders() {
-    if (!std::filesystem::exists(exampleVertexPath_) || !std::filesystem::exists(exampleFragmentPath_)) {
-        diagnostics_.addError("Example shaders are missing from runtime assets folder: " + exampleVertexPath_.parent_path().string());
+    if (!std::filesystem::exists(exampleShaderPath_)) {
+        diagnostics_.addError("Example shader is missing from runtime assets folder: " + exampleShaderPath_.parent_path().string());
         return false;
     }
 
-    const bool loaded = workspace_.openShaders(exampleVertexPath_, exampleFragmentPath_);
+    const bool loaded = workspace_.openShader(exampleShaderPath_);
     if (loaded) {
-        diagnostics_.addInfo("Loaded example shaders from " + exampleVertexPath_.parent_path().string() + ".");
+        diagnostics_.addInfo("Loaded example shader from " + exampleShaderPath_.parent_path().string() + ".");
     }
     return loaded;
 }
 
-bool Application::openVertexShaderFromDialog() {
+bool Application::openShaderFromDialog() {
 #ifdef _WIN32
-    const auto selected =
-        openShaderPathDialog("Open Vertex Shader", "Vertex Shader (*.vert;*.vs)\0*.vert;*.vs\0GLSL Files (*.glsl)\0*.glsl\0All Files (*.*)\0*.*\0");
-    return selected ? workspace_.openVertexShader(*selected) : false;
+    const auto selected = openFileDialog(
+        L"Open Shader",
+        L"GLSL Shader (*.glsl)\0*.glsl\0All Files (*.*)\0*.*\0",
+        executableDirectory());
+    if (!selected) {
+        return false;
+    }
+
+    return workspace_.openShader(*selected);
 #else
     diagnostics_.addError("Native file dialogs are only implemented for Windows in this build.");
     return false;
 #endif
 }
 
-bool Application::openFragmentShaderFromDialog() {
+bool Application::openImageForUniform(const std::string& uniformName) {
 #ifdef _WIN32
-    const auto selected =
-        openShaderPathDialog("Open Fragment Shader", "Fragment Shader (*.frag;*.fs)\0*.frag;*.fs\0GLSL Files (*.glsl)\0*.glsl\0All Files (*.*)\0*.*\0");
-    return selected ? workspace_.openFragmentShader(*selected) : false;
+    const auto selected = openFileDialog(
+        L"Open Image",
+        L"Images (*.png;*.jpg;*.jpeg;*.bmp;*.tga)\0*.png;*.jpg;*.jpeg;*.bmp;*.tga\0All Files (*.*)\0*.*\0",
+        executableDirectory());
+    if (!selected) {
+        return false;
+    }
+    workspace_.applyUniform(uniformName, selected->string());
+    return true;
 #else
     diagnostics_.addError("Native file dialogs are only implemented for Windows in this build.");
     return false;
 #endif
-}
-
-void Application::restorePanelVisibility() {
-    const auto& openPanels = layoutState_.openPanels();
-    showShaderEditor_ = hasPanel(openPanels, "shader-editor");
-    showRenderView_ = hasPanel(openPanels, "render-view");
-    showUniforms_ = hasPanel(openPanels, "uniforms");
-    showDiagnostics_ = hasPanel(openPanels, "diagnostics");
-    showShaderErrors_ = hasPanel(openPanels, "shader-errors");
-}
-
-void Application::storePanelVisibility() {
-    std::vector<std::string> openPanels;
-    if (showShaderEditor_) {
-        openPanels.emplace_back("shader-editor");
-    }
-    if (showRenderView_) {
-        openPanels.emplace_back("render-view");
-    }
-    if (showUniforms_) {
-        openPanels.emplace_back("uniforms");
-    }
-    if (showDiagnostics_) {
-        openPanels.emplace_back("diagnostics");
-    }
-    if (showShaderErrors_) {
-        openPanels.emplace_back("shader-errors");
-    }
-
-    layoutState_.setOpenPanels(std::move(openPanels));
 }
 
 void Application::drawMainMenu() {
@@ -258,14 +274,8 @@ void Application::drawMainMenu() {
 
     // Menu actions mirror the inline buttons from the editor panel.
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Load Example Shaders")) {
-            loadExampleShaders();
-        }
-        if (ImGui::MenuItem("Open Vertex Shader...")) {
-            openVertexShaderFromDialog();
-        }
-        if (ImGui::MenuItem("Open Fragment Shader...")) {
-            openFragmentShaderFromDialog();
+        if (ImGui::MenuItem("Open Shader...")) {
+            openShaderFromDialog();
         }
         if (ImGui::MenuItem("Save Current Shaders", "Ctrl+S")) {
             workspace_.saveShaders();
@@ -285,6 +295,7 @@ void Application::drawMainMenu() {
         ImGui::MenuItem("Uniforms", nullptr, &showUniforms_);
         ImGui::MenuItem("Diagnostics", nullptr, &showDiagnostics_);
         ImGui::MenuItem("Shader Errors", nullptr, &showShaderErrors_);
+        ImGui::MenuItem("Shader Help", nullptr, &showShaderHelp_);
         ImGui::EndMenu();
     }
 
@@ -311,14 +322,11 @@ void Application::drawWorkspaceHost() {
     ImGui::PopStyleVar(2);
 
     drawMainMenu();
-    ImGui::TextUnformatted("GLFW + OpenGL + ImGui runtime active");
-    ImGui::SameLine();
 #ifdef IMGUI_HAS_DOCK
-    ImGui::TextUnformatted("| Docking enabled");
     // The workspace host owns the single dockspace so every major tool panel can be rearranged safely.
     ImGui::DockSpace(ImGui::GetID("WorkspaceDockspace"), ImVec2(0.0F, 0.0F), ImGuiDockNodeFlags_PassthruCentralNode);
 #else
-    ImGui::TextUnformatted("| Docking unavailable in current ImGui build");
+    ImGui::TextUnformatted("Docking unavailable in current ImGui build");
 #endif
     ImGui::End();
 }
@@ -330,23 +338,13 @@ void Application::drawShaderEditorWindow() {
 
     auto& editorState = workspace_.editorState();
     const auto& document = editorState.document();
+    std::string source = document.source;
     if (ImGui::Begin("Shader Editor", &showShaderEditor_)) {
-        ImGui::TextUnformatted("Vertex + Fragment shader editor");
-        ImGui::SameLine();
         if (document.isDirty) {
             ImGui::TextUnformatted("(modified)");
         }
-
-        if (ImGui::Button("Load Example")) {
-            loadExampleShaders();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Open Vertex")) {
-            openVertexShaderFromDialog();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Open Fragment")) {
-            openFragmentShaderFromDialog();
+        if (ImGui::Button("Open .glsl")) {
+            openShaderFromDialog();
         }
         ImGui::SameLine();
         if (ImGui::Button("Save")) {
@@ -356,28 +354,31 @@ void Application::drawShaderEditorWindow() {
         if (ImGui::Button("Update Shader")) {
             shaderEditorPanel_.pressUpdateButton();
         }
-
+        ImGui::SameLine();
+        if (ImGui::Button("Format Shader")) {
+            source = formatShaderSource(source);
+            editorState.updateSource(source);
+        }
         if (document.isDirty) {
             ImGui::SameLine();
             ImGui::TextWrapped("%s", documentDialogs_.unsavedChangesMessage(document).c_str());
         }
 
-        // ImGui text inputs require a writable contiguous buffer, so the editor works on temporary copies.
-        std::string vertexSource = document.vertexSource;
-        ImGui::SeparatorText("Vertex");
-        if (editMultilineString("##vertex-source", vertexSource, 220.0F)) {
-            editorState.updateVertexSource(vertexSource);
+        if (shaderEditorText_ != source) {
+            shaderEditor_.SetText(source);
+            shaderEditorText_ = source;
         }
-
-        std::string fragmentSource = document.fragmentSource;
-        ImGui::SeparatorText("Fragment");
-        if (editMultilineString("##fragment-source", fragmentSource, 220.0F)) {
-            editorState.updateFragmentSource(fragmentSource);
+        ImVec2 editorSize = ImGui::GetContentRegionAvail();
+        editorSize.y = std::max(1.0F, editorSize.y);
+        shaderEditor_.Render("##phoenix-source", editorSize, true);
+        const std::string editedSource = shaderEditor_.GetText();
+        if (editedSource != source) {
+            shaderEditorText_ = editedSource;
+            editorState.updateSource(editedSource);
         }
     }
     ImGui::End();
 }
-
 void Application::drawRenderViewWindow() {
     if (!showRenderView_) {
         return;
@@ -411,6 +412,10 @@ void Application::drawRenderViewWindow() {
                          ImVec2(1.0F, 0.0F));
             if (ImGui::IsItemHovered()) {
                 const ImVec2 dragDelta = ImGui::GetIO().MouseDelta;
+                const float wheelDelta = ImGui::GetIO().MouseWheel;
+                if (wheelDelta != 0.0F) {
+                    renderViewPanel_.zoom(wheelDelta);
+                }
                 // Left-drag orbits the scene, right-drag pans it inside the preview viewport.
                 if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     renderViewPanel_.orbit(glm::vec2(dragDelta.x * 0.01F, dragDelta.y * 0.01F));
@@ -533,6 +538,18 @@ void Application::drawUniformsWindow() {
                 continue;
             }
 
+            if (const auto* value = std::get_if<std::string>(&uniform.currentValue)) {
+                ImGui::Text("%s (sampler2D)", uniform.name.c_str());
+                if (!value->empty()) {
+                    ImGui::TextWrapped("%s", value->c_str());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button(("Load Image##" + uniform.name).c_str())) {
+                    openImageForUniform(uniform.name);
+                }
+                continue;
+            }
+
             ImGui::Text("%s (%s)", uniform.name.c_str(), uniform.kind.c_str());
         }
     }
@@ -561,10 +578,37 @@ void Application::drawShaderErrorsWindow() {
 
     if (ImGui::Begin("Shader Errors", &showShaderErrors_)) {
         ImGui::BeginChild("shader-errors-scroll");
+        std::string errors;
         for (const auto& error : shaderErrorsPanel_.errors()) {
-            ImGui::TextWrapped("%s", error.c_str());
+            errors += error;
+            errors.push_back('\n');
         }
+        std::vector<char> buffer(errors.begin(), errors.end());
+        buffer.push_back('\0');
+        ImGui::InputTextMultiline(
+            "##shader-errors-text",
+            buffer.data(),
+            buffer.size(),
+            ImVec2(-FLT_MIN, -FLT_MIN),
+            ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_AllowTabInput);
         ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void Application::drawShaderHelpWindow() {
+    if (!showShaderHelp_) {
+        return;
+    }
+    if (ImGui::Begin("Shader Help", &showShaderHelp_)) {
+        ImGui::TextUnformatted("Phoenix GLSL globals supplied by ShaderEditor");
+        ImGui::Separator();
+        ImGui::BulletText("MVP (mat4): model-view-projection matrix supplied by Phoenix GLSL shader editor.");
+        ImGui::BulletText("uCameraPos (vec3): camera position supplied automatically by the engine.");
+        ImGui::BulletText("aPos (location 0): vertex position supplied by the preview mesh.");
+        ImGui::BulletText("aUv (location 1): UV texture coordinate supplied by the preview mesh.");
+        ImGui::BulletText("sampler2D uniforms: choose an image from the Uniforms panel.");
+        ImGui::TextWrapped("Declare the inputs in the vertex shader and pass values to the fragment shader using out/in variables.");
     }
     ImGui::End();
 }

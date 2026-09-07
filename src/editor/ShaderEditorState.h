@@ -1,12 +1,12 @@
-#pragma once
+﻿#pragma once
 
 #include "editor/ShaderPairDocument.h"
 
 namespace shadereditor {
-// Owns the active vertex/fragment document being edited.
 class ShaderEditorState {
   public:
     void attachDocument(ShaderPairDocument document);
+    void updateSource(const std::string& source);
     void updateVertexSource(const std::string& source);
     void updateFragmentSource(const std::string& source);
     [[nodiscard]] ShaderPairDocument& document() { return document_; }
@@ -16,3 +16,4 @@ class ShaderEditorState {
     ShaderPairDocument document_;
 };
 }  // namespace shadereditor
+

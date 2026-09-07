@@ -30,7 +30,7 @@ implementation and testing of each story.
 - [X] T003 [P] Create VS Code build and debug tasks in .vscode/tasks.json
 - [X] T004 [P] Create VS Code launch configuration in .vscode/launch.json
 - [X] T005 [P] Add project workspace defaults in .vscode/settings.json
-- [X] T006 [P] Create asset directory placeholders for built-in resources in assets/primitives/.gitkeep and assets/shaders/.gitkeep
+- [X] T006 [P] Create the shader asset directory placeholder in assets/shaders/.gitkeep
 
 ---
 
@@ -145,7 +145,7 @@ previewing them without losing workspace state.
 - [X] T046 Improve application-level logging and user-visible status reporting in src/app/application/Application.cpp and src/app/workspace/DiagnosticsState.cpp
 - [X] T047 [P] Add sample shader assets for smoke testing in assets/shaders/basic.vert and assets/shaders/basic.frag
 - [X] T048 [P] Add final smoke-test checklist coverage for quickstart validation in specs/001-shader-editor/quickstart.md
-- [ ] T049 Run the documented build and smoke validation flow and capture any follow-up fixes in specs/001-shader-editor/quickstart.md
+- [X] T049 Run the documented build and smoke validation flow and capture any follow-up fixes in specs/archive/001-shader-editor/quickstart.md
 - [X] T074 [P] Create a repository README with application overview, feature usage, and build instructions in README.md
 - [X] T075 Build and validate the Release configuration of the application in build-vcpkg/ and document the exact command flow in specs/001-shader-editor/quickstart.md
 
@@ -221,7 +221,7 @@ previewing them without losing workspace state.
 ### Verification for User Story 6
 
 - [X] T068 [P] [US6] Add a manual code-review checklist for GLM-only math usage and comment coverage in specs/001-shader-editor/quickstart.md
-- [ ] T069 [P] [US6] Run full regression verification for build, tests, preview navigation, docking, and extended uniforms in specs/001-shader-editor/quickstart.md
+- [X] T069 [P] [US6] Run full regression verification for build, tests, preview navigation, docking, and extended uniforms in specs/archive/001-shader-editor/quickstart.md
 
 ### Implementation for User Story 6
 

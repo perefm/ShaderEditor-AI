@@ -3,8 +3,6 @@
 #include "app/platform/WindowContext.h"
 #include "app/workspace/DiagnosticsState.h"
 #include "app/workspace/WorkspaceController.h"
-#include "app/workspace/WorkspaceLayoutState.h"
-#include "services/persistence/LayoutPersistenceService.h"
 #include "ui/dockspace/DockspaceHost.h"
 #include "ui/panels/DiagnosticsPanel.h"
 #include "ui/panels/RenderViewPanel.h"
@@ -12,6 +10,7 @@
 #include "ui/panels/ShaderErrorsPanel.h"
 #include "ui/panels/UniformsPanel.h"
 #include "ui/widgets/DocumentDialogs.h"
+#include "imgui_color_text_edit/TextEditor.h"
 
 #include <filesystem>
 
@@ -29,11 +28,8 @@ class Application {
   private:
     // Example shaders live under the runtime assets folder next to the executable.
     bool loadExampleShaders();
-    bool openVertexShaderFromDialog();
-    bool openFragmentShaderFromDialog();
-    // Dockable panel visibility is persisted between launches.
-    void restorePanelVisibility();
-    void storePanelVisibility();
+    bool openShaderFromDialog();
+    bool openImageForUniform(const std::string& uniformName);
     // Each major tool panel is drawn independently so ImGui docking can rearrange them.
     void drawMainMenu();
     void drawWorkspaceHost();
@@ -42,6 +38,7 @@ class Application {
     void drawUniformsWindow();
     void drawDiagnosticsWindow();
     void drawShaderErrorsWindow();
+    void drawShaderHelpWindow();
     void registerPanels();
     void drawUi();
 
@@ -51,8 +48,6 @@ class Application {
     DiagnosticsState diagnostics_;
     // Central document, uniform and preview state.
     WorkspaceController workspace_;
-    WorkspaceLayoutState layoutState_;
-    LayoutPersistenceService layoutPersistence_;
     DockspaceHost dockspaceHost_;
     ShaderEditorPanel shaderEditorPanel_;
     RenderViewPanel renderViewPanel_;
@@ -61,12 +56,15 @@ class Application {
     ShaderErrorsPanel shaderErrorsPanel_;
     DocumentDialogs documentDialogs_;
     // Runtime paths for the bundled example shaders.
-    std::filesystem::path exampleVertexPath_;
-    std::filesystem::path exampleFragmentPath_;
+    std::filesystem::path exampleShaderPath_;
+    std::filesystem::path pixelLightingShaderPath_;
     bool showShaderEditor_ {true};
     bool showRenderView_ {true};
     bool showUniforms_ {true};
-    bool showDiagnostics_ {true};
+    bool showDiagnostics_ {false};
     bool showShaderErrors_ {true};
+    bool showShaderHelp_ {false};
+    TextEditor shaderEditor_;
+    std::string shaderEditorText_;
 };
 }  // namespace shadereditor

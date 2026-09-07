@@ -1,22 +1,31 @@
-#pragma once
+﻿#pragma once
 
 #include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace shadereditor {
-// Editable shader pair plus metadata used by save/load and dirty-state tracking.
+struct ShaderStageLine {
+    int stageLine {0};
+    int documentLine {0};
+};
+
+// One Phoenix .glsl document plus the extracted sources used by OpenGL.
 struct ShaderPairDocument {
+    std::optional<std::filesystem::path> shaderPath;
     std::optional<std::filesystem::path> vertexPath;
     std::optional<std::filesystem::path> fragmentPath;
+    std::string source;
     std::string vertexSource;
     std::string fragmentSource;
+    std::vector<ShaderStageLine> vertexLineMap;
+    std::vector<ShaderStageLine> fragmentLineMap;
     bool isDirty {false};
     std::chrono::system_clock::time_point lastLoadedAt {};
     std::chrono::system_clock::time_point lastSavedAt {};
 
-    // markDirty is called after in-memory edits that have not been persisted yet.
     void markDirty() { isDirty = true; }
     void markSaved() {
         isDirty = false;
@@ -28,3 +37,4 @@ struct ShaderPairDocument {
     }
 };
 }  // namespace shadereditor
+

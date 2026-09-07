@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-shader-editor`  
 **Created**: 2026-04-11  
-**Status**: Draft  
+**Status**: Complete  
 **Input**: User description: "Build a multiplatform application that will help me to edit vertex and fragment OpenGL shaders, the application it should allow to load, edit and save vertex and fragment shaders, with an integrated editor. The UI needs to be fast and responsive, based in ImGUI library. The application will have a render view, where we can choose between multiple models where the shaders are rendered: into a plane, a cube, a donut, and some other primitives in 3D. All windows must be dockable."
 
 ## User Scenarios & Testing *(mandatory)*

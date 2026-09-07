@@ -7,7 +7,6 @@ add_executable(shader_editor_tests
     unit/test_render_session.cpp
     unit/test_shader_file_service.cpp
     unit/test_uniform_introspection.cpp
-    unit/test_workspace_layout.cpp
     unit/test_workspace_models.cpp
 )
 
