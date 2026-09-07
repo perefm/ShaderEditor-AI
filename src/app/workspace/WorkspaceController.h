@@ -15,6 +15,8 @@
 #include <chrono>
 #include <filesystem>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace shadereditor {
 // Coordinates document loading, uniform discovery and preview rendering for the UI layer.
@@ -65,6 +67,13 @@ class WorkspaceController {
     // re-importing it. No-op (returns false) if no model has ever been loaded successfully.
     bool selectModel();
     [[nodiscard]] bool hasLoadedModel() const { return previewRenderer_.hasLoadedModel(); }
+    // Names of the active model's animation clips (empty if no model is loaded or it has none),
+    // for populating an animation-selection UI.
+    [[nodiscard]] std::vector<std::string> modelAnimationNames() const { return previewRenderer_.activeModelAnimationNames(); }
+    // Selects which animation clip SkeletalAnimator should play; -1 means "no animation" (bind
+    // pose). Out-of-range indices are also treated as "no animation" by SkeletalAnimator.
+    void selectAnimation(int animationIndex) { renderSession_.selectedAnimationIndex = animationIndex; }
+    [[nodiscard]] int selectedAnimationIndex() const { return renderSession_.selectedAnimationIndex; }
 
     [[nodiscard]] ShaderEditorState& editorState() { return editorState_; }
     [[nodiscard]] const ShaderEditorState& editorState() const { return editorState_; }

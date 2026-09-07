@@ -43,6 +43,10 @@ class PreviewRenderer {
     // True once setActiveModel() has been called successfully at least once, so
     // WorkspaceController::selectModel() can re-activate the cached model without re-importing.
     [[nodiscard]] bool hasLoadedModel() const { return activeModel_ != nullptr; }
+    // Names of every animation clip the active model carries (empty if no model is loaded or the
+    // model has no animations), in the same order as ModelDocument::animations / RenderSession's
+    // selectedAnimationIndex, so panels can populate an animation picker.
+    [[nodiscard]] std::vector<std::string> activeModelAnimationNames() const;
 
   private:
     struct MeshBuffers {
@@ -73,6 +77,12 @@ class PreviewRenderer {
     void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height);
     void beginModelFrame(GLuint program, int width, int height);
     GLuint textureForPath(const std::filesystem::path& path);
+    // Decodes and uploads a texture embedded directly in the model file (glTF/.glb), caching it
+    // by a hash of its encoded bytes since it has no file path to key on.
+    GLuint textureForEmbeddedData(const std::vector<unsigned char>& encodedBytes);
+    // Shared GL texture upload helper for both on-disk and embedded textures (both decode to a
+    // tightly-packed RGBA8 pixel buffer via stb_image before reaching this point).
+    GLuint uploadRgbaTexture(const unsigned char* pixels, int width, int height);
 
     PreviewCamera previewCamera_;
     PrimitiveLibrary library_;

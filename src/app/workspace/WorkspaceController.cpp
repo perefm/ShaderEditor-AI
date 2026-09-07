@@ -68,6 +68,7 @@ bool WorkspaceController::updateShaders() {
     // previousInteraction is restored below).
     const auto previousRenderTargetKind = renderSession_.renderTargetKind;
     const auto previousLoadedModelId = renderSession_.loadedModelId;
+    const auto previousSelectedAnimationIndex = renderSession_.selectedAnimationIndex;
     const auto nextSession = previewRenderer_.updatePreview(editorState_.document(), previousPrimitive, uniformState_.definitions());
     if (nextSession.frameStatus == FrameStatus::Error) {
         renderSession_.errorMessage = nextSession.errorMessage;
@@ -79,6 +80,7 @@ bool WorkspaceController::updateShaders() {
     renderSession_.interactionState = previousInteraction;
     renderSession_.renderTargetKind = previousRenderTargetKind;
     renderSession_.loadedModelId = previousLoadedModelId;
+    renderSession_.selectedAnimationIndex = previousSelectedAnimationIndex;
     refreshUniforms();
     diagnostics_.addInfo("Updated shader preview.");
     return true;
@@ -143,6 +145,9 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
 
     renderSession_.renderTargetKind = RenderTargetKind::Model;
     renderSession_.loadedModelId = modelPath.stem().string();
+    // Default to playing the first animation clip (if any) so freshly imported animated models
+    // behave like before this feature existed; the user can switch clips via selectAnimation().
+    renderSession_.selectedAnimationIndex = previewRenderer_.activeModelAnimationNames().empty() ? -1 : 0;
     // Rescale zoom/orbit/pan sensitivity to this model's size (built-in primitives are ~1 unit
     // across, so a radius near zero would otherwise leave the camera clipped through/miles away
     // from an arbitrarily large or small imported model). setSceneScale() also resets orbit/pan.

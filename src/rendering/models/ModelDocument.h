@@ -37,7 +37,14 @@ struct ModelVertex {
 // ("texture_" + phoenix type name + 1-based index within that type), e.g. "texture_diffuse1".
 struct ModelTextureSlot {
     std::string shaderUniformName;
+    // Populated when the texture references an external image file (most FBX/OBJ/DAE content).
     std::filesystem::path sourcePath;
+    // Populated instead of sourcePath when the texture is embedded inside the model file itself
+    // (common for glTF/.glb, which packs images as binary buffer views rather than loose files).
+    // Holds the raw, still-encoded (e.g. PNG/JPEG) file bytes exactly as Assimp exposed them, so
+    // PreviewRenderer can decode them with stbi_load_from_memory the same way textureForPath()
+    // decodes on-disk files.
+    std::vector<unsigned char> embeddedImageData;
     // Populated by PreviewRenderer the first time this texture is uploaded to the GPU; 0 means
     // "not yet uploaded" so the renderer can lazily create/cache GL texture objects per path.
     GLuint glTextureId {0};

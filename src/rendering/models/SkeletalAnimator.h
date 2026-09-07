@@ -16,6 +16,9 @@ class SkeletalAnimator {
     // Returns one glm::mat4 per bone (size == document.boneCount), in bone-index order, ready
     // to upload as the "gBones" uniform array. Returns identity matrices when the model has no
     // skeleton or no animation clips, so callers can always upload a valid (if static) pose.
-    [[nodiscard]] std::vector<glm::mat4> boneTransforms(const ModelDocument& document, float elapsedSeconds) const;
+    // animationIndex selects which of document.animations to sample; a negative or out-of-range
+    // index falls back to the bind pose (identity bone transforms) rather than clamping to clip 0,
+    // so callers can explicitly request "no animation".
+    [[nodiscard]] std::vector<glm::mat4> boneTransforms(const ModelDocument& document, float elapsedSeconds, int animationIndex = 0) const;
 };
 }  // namespace shadereditor

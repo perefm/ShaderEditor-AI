@@ -490,6 +490,39 @@ void Application::drawRenderViewWindow() {
                 workspace_.selectModel();
             }
         }
+        // Lets the user import a model directly from this panel, without going through the File
+        // menu; reuses the exact same file dialog/import path as File > Open Model...
+        ImGui::SameLine();
+        if (ImGui::Button("Open Model...")) {
+            openModelFromDialog();
+        }
+
+        // Animation clip picker, shown only when the active model actually has animation clips
+        // to choose from (static/untextured meshes and built-in primitives have none).
+        const std::vector<std::string> animationNames = renderViewPanel_.animationNames();
+        if (!animationNames.empty()) {
+            int selectedIndex = renderViewPanel_.selectedAnimationIndex();
+            // Slot 0 is always "None" (bind pose) so the user can freeze the model's rest pose.
+            const int comboIndex = selectedIndex + 1;
+            std::string previewLabel = selectedIndex < 0 ? "None" : animationNames[static_cast<std::size_t>(selectedIndex)];
+            ImGui::SetNextItemWidth(220.0F);
+            if (ImGui::BeginCombo("Animation", previewLabel.c_str())) {
+                const bool noneSelected = comboIndex == 0;
+                if (ImGui::Selectable("None", noneSelected)) {
+                    renderViewPanel_.selectAnimation(-1);
+                }
+                for (std::size_t index = 0; index < animationNames.size(); ++index) {
+                    const bool isSelected = comboIndex == static_cast<int>(index) + 1;
+                    if (ImGui::Selectable(animationNames[index].c_str(), isSelected)) {
+                        renderViewPanel_.selectAnimation(static_cast<int>(index));
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
         ImGui::Separator();
         if (ImGui::Button("Reset View")) {
             renderViewPanel_.resetView();

@@ -36,3 +36,23 @@ TEST_CASE("SkeletalAnimator produces one transform per bone for the bundled anim
     const auto transformsLater = animator.boneTransforms(result.document, 0.5F);
     REQUIRE(transformsLater.size() == result.document.boneCount);
 }
+
+TEST_CASE("SkeletalAnimator falls back to the bind pose when no animation is selected") {
+    shadereditor::AssimpModelLoader loader;
+    const auto result = loader.load(std::filesystem::path(SHADEREDITOR_SOURCE_DIR) / "assets" / "models" / "Fox" / "Fox.glb");
+    REQUIRE(result.success);
+    REQUIRE(!result.document.animations.empty());
+
+    shadereditor::SkeletalAnimator animator;
+    // A negative animationIndex (the RenderSession default for "no animation selected") must
+    // produce identity bone transforms regardless of elapsed time, unlike the animated case.
+    const auto bindPoseA = animator.boneTransforms(result.document, 0.0F, -1);
+    const auto bindPoseB = animator.boneTransforms(result.document, 5.0F, -1);
+    REQUIRE(bindPoseA.size() == result.document.boneCount);
+    REQUIRE(bindPoseA == bindPoseB);
+
+    // An out-of-range positive index should behave the same way (defensive fallback), not crash
+    // or silently clamp to a valid clip.
+    const auto outOfRangePose = animator.boneTransforms(result.document, 0.0F, static_cast<int>(result.document.animations.size()) + 5);
+    REQUIRE(outOfRangePose == bindPoseA);
+}

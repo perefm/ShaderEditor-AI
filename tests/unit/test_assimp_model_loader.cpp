@@ -29,6 +29,10 @@ TEST_CASE("AssimpModelLoader imports the bundled animated Fox model") {
         for (const auto& slot : mesh.material.textureSlots) {
             if (slot.shaderUniformName == "texture_diffuse1") {
                 foundDiffuseTexture = true;
+                // Fox.glb packs its diffuse texture directly in the .glb binary (glTF embedded
+                // image), so it must be exposed via embeddedImageData rather than a file path.
+                REQUIRE(!slot.embeddedImageData.empty());
+                REQUIRE(slot.sourcePath.empty());
             }
         }
     }

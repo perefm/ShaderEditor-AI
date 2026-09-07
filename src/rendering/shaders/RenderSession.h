@@ -31,6 +31,9 @@ struct RenderSession {
     // Identifier (source file path/stem) of the currently loaded model, meaningful only when
     // renderTargetKind == Model; empty if no model has ever been imported.
     std::string loadedModelId;
+    // Index into the loaded model's ModelDocument::animations that SkeletalAnimator should play;
+    // -1 (the default) means "no animation" (bind pose / static mesh). Ignored for primitives.
+    int selectedAnimationIndex {-1};
     // Read-only snapshot of the playback clock so panels can display t/tend/bpm/beat/play-state
     // without reaching into WorkspaceController internals.
     PlaybackClockState playback;

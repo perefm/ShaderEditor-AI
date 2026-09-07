@@ -52,15 +52,16 @@ glm::mat4 sampleChannel(const ModelDocument::AnimationChannel& channel, float ti
 }
 }
 
-std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& document, float elapsedSeconds) const {
+std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& document, float elapsedSeconds, int animationIndex) const {
     std::vector<glm::mat4> result(document.boneCount, glm::mat4(1.0F));
     if (!document.hasSkeleton || document.sceneNodes.empty()) {
         return result;
     }
 
-    // This example animator plays the model's first animation clip on a loop; supporting clip
-    // selection/blending is out of scope for this iteration (see spec Assumptions).
-    const ModelDocument::AnimationClip* clip = document.animations.empty() ? nullptr : &document.animations.front();
+    // A negative/out-of-range index (including the "no animation selected" default of -1) means
+    // the caller wants the static bind pose, so skip clip sampling entirely.
+    const bool hasValidIndex = animationIndex >= 0 && static_cast<std::size_t>(animationIndex) < document.animations.size();
+    const ModelDocument::AnimationClip* clip = hasValidIndex ? &document.animations[static_cast<std::size_t>(animationIndex)] : nullptr;
     float animationTime = 0.0F;
     std::unordered_map<std::string, const ModelDocument::AnimationChannel*> channelByNodeName;
     if (clip != nullptr && clip->durationSeconds > 0.0F) {

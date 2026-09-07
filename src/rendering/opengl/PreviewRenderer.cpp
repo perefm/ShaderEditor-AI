@@ -7,7 +7,9 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <functional>
 #include <regex>
+#include <string_view>
 #include <utility>
 
 namespace shadereditor {
@@ -138,7 +140,7 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
         // The animator recomputes bone transforms fresh every frame from the current playback
         // time, so animation always reflects Play/Pause/Reset state exactly (no stale caching).
         const std::vector<glm::mat4> boneTransforms =
-            skeletalAnimator_.boneTransforms(*activeModel_, session.playback.elapsedSeconds());
+            skeletalAnimator_.boneTransforms(*activeModel_, session.playback.elapsedSeconds(), session.selectedAnimationIndex);
         for (std::size_t meshIndex = 0; meshIndex < activeModel_->meshes.size(); ++meshIndex) {
             renderModelMesh(activeModel_->meshes[meshIndex], activeModelBuffers_[meshIndex], program_, boneTransforms);
         }
@@ -368,6 +370,20 @@ bool PreviewRenderer::ensureMesh(const PreviewPrimitive& primitive, std::string&
     return true;
 }
 
+std::vector<std::string> PreviewRenderer::activeModelAnimationNames() const {
+    std::vector<std::string> names;
+    if (activeModel_ == nullptr) {
+        return names;
+    }
+    names.reserve(activeModel_->animations.size());
+    for (const auto& clip : activeModel_->animations) {
+        // Some formats (e.g. FBX) leave clip names blank; fall back to an index-based label so
+        // every entry is still selectable and distinguishable in the UI.
+        names.push_back(clip.name.empty() ? ("Animation " + std::to_string(names.size())) : clip.name);
+    }
+    return names;
+}
+
 bool PreviewRenderer::setActiveModel(ModelDocument document) {
     if (document.meshes.empty()) {
         return false;
@@ -465,6 +481,38 @@ GLuint PreviewRenderer::textureForPath(const std::filesystem::path& path) {
         return 0;
     }
 
+    const GLuint texture = uploadRgbaTexture(pixels, width, height);
+    stbi_image_free(pixels);
+    textures_.emplace(key, texture);
+    return texture;
+}
+
+GLuint PreviewRenderer::textureForEmbeddedData(const std::vector<unsigned char>& encodedBytes) {
+    // Embedded (glTF/.glb) textures have no file path, so cache them by a hash of their encoded
+    // bytes instead - cheap to compute once per mesh load and stable across frames.
+    const std::size_t key = std::hash<std::string_view>{}(
+        std::string_view(reinterpret_cast<const char*>(encodedBytes.data()), encodedBytes.size()));
+    const std::string cacheKey = "embedded:" + std::to_string(key);
+    const auto cached = textures_.find(cacheKey);
+    if (cached != textures_.end()) {
+        return cached->second;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* pixels = stbi_load_from_memory(encodedBytes.data(), static_cast<int>(encodedBytes.size()), &width, &height, &channels, 4);
+    if (pixels == nullptr) {
+        return 0;
+    }
+
+    const GLuint texture = uploadRgbaTexture(pixels, width, height);
+    stbi_image_free(pixels);
+    textures_.emplace(cacheKey, texture);
+    return texture;
+}
+
+GLuint PreviewRenderer::uploadRgbaTexture(const unsigned char* pixels, int width, int height) {
     GLuint texture = 0;
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -473,8 +521,6 @@ GLuint PreviewRenderer::textureForPath(const std::filesystem::path& path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    stbi_image_free(pixels);
-    textures_.emplace(key, texture);
     return texture;
 }
 
@@ -643,14 +689,18 @@ void PreviewRenderer::renderModelMesh(const ModelMesh& mesh,
     }
 
     // Bind every texture slot the mesh's material carries, using the exact Phoenix uniform name
-    // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015).
+    // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015). Textures
+    // may either live on disk (sourcePath) or be embedded directly in the model file (glTF/.glb),
+    // in which case embeddedImageData holds the still-encoded bytes to decode instead.
     int textureUnit = 0;
     for (const auto& slot : mesh.material.textureSlots) {
         const GLint location = glGetUniformLocation(program, slot.shaderUniformName.c_str());
         if (location < 0) {
             continue;
         }
-        const GLuint texture = textureForPath(slot.sourcePath);
+        const GLuint texture = slot.embeddedImageData.empty()
+                                    ? textureForPath(slot.sourcePath)
+                                    : textureForEmbeddedData(slot.embeddedImageData);
         if (texture == 0) {
             continue;
         }

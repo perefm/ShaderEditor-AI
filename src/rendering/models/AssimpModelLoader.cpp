@@ -187,7 +187,22 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
                 // Phoenix names uniforms "texture_" + type + (1-based index within that type).
                 slot.shaderUniformName = std::string("texture_") + phoenixTextureTypeName(textureType) +
                                           std::to_string(textureIndexWithinType + 1);
-                slot.sourcePath = resolveTexturePath(texturePath, modelDirectory);
+                // Assimp represents embedded textures (common in .glb) with a path of the form
+                // "*<index>" referencing scene->mTextures[index], instead of a real file path.
+                const aiTexture* embeddedTexture = scene->GetEmbeddedTexture(texturePath.C_Str());
+                if (embeddedTexture != nullptr) {
+                    if (embeddedTexture->mHeight == 0) {
+                        // Compressed image (PNG/JPEG) stored as a raw byte buffer; mWidth is the
+                        // byte count. Copy it so PreviewRenderer can decode it independently of
+                        // the aiScene's lifetime (the Assimp::Importer is destroyed after load()).
+                        const auto* bytes = reinterpret_cast<const unsigned char*>(embeddedTexture->pcData);
+                        slot.embeddedImageData.assign(bytes, bytes + embeddedTexture->mWidth);
+                    }
+                    // Uncompressed (mHeight != 0) embedded textures are rare and unsupported here;
+                    // the slot is still added so the uniform exists, just without pixel data.
+                } else {
+                    slot.sourcePath = resolveTexturePath(texturePath, modelDirectory);
+                }
                 result.material.textureSlots.push_back(std::move(slot));
             }
         }
