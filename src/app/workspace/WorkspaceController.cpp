@@ -121,6 +121,9 @@ void WorkspaceController::selectPrimitive(const std::string& primitiveId) {
     renderSession_.renderTargetKind = RenderTargetKind::Primitive;
     // Primitive changes go through the same update path as shader edits to keep diagnostics unified.
     renderSession_.selectedPrimitiveId = primitiveId;
+    // Built-in primitives are ~1 unit across, so restore the default (non-model) camera scale;
+    // selectModel() below restores the model's own scale when switching back to it.
+    renderSession_.interactionState.setSceneScale(1.0F);
     updateShaders();
 }
 
@@ -130,6 +133,9 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
         diagnostics_.addError("Failed to import model: " + result.errorMessage);
         return false;
     }
+    // Capture the bounding radius before the document is moved into previewRenderer_, so the
+    // preview camera can be reframed proportionally to this model's actual size.
+    const float boundingRadius = result.document.boundingRadius();
     if (!previewRenderer_.setActiveModel(std::move(result.document))) {
         diagnostics_.addError("Imported model has no drawable meshes: " + modelPath.string());
         return false;
@@ -137,6 +143,10 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
 
     renderSession_.renderTargetKind = RenderTargetKind::Model;
     renderSession_.loadedModelId = modelPath.stem().string();
+    // Rescale zoom/orbit/pan sensitivity to this model's size (built-in primitives are ~1 unit
+    // across, so a radius near zero would otherwise leave the camera clipped through/miles away
+    // from an arbitrarily large or small imported model). setSceneScale() also resets orbit/pan.
+    renderSession_.interactionState.setSceneScale(boundingRadius > 0.0F ? boundingRadius : 1.0F);
     diagnostics_.addInfo("Imported model: " + modelPath.string());
     // Model uniforms (Mat_*/gBones/textures) are bound per-mesh by PreviewRenderer, but the
     // uniform panel still needs to know about any *shader* uniforms (e.g. MVP, custom ones);

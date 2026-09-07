@@ -5,6 +5,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <array>
@@ -68,6 +69,20 @@ struct ModelDocument {
     // Total distinct bones across the whole model; sizes the gBones upload array.
     std::size_t boneCount {0};
     std::filesystem::path sourcePath;
+
+    // Axis-aligned bounding box across all mesh vertex positions (bind pose, pre-animation),
+    // used by the preview camera to frame/scale zoom, orbit and pan proportionally to the
+    // model's actual size instead of assuming the ~1-unit scale of the built-in primitives.
+    glm::vec3 boundsMin {0.0F};
+    glm::vec3 boundsMax {0.0F};
+
+    // Convenience helpers derived from boundsMin/boundsMax.
+    [[nodiscard]] glm::vec3 boundsCenter() const { return (boundsMin + boundsMax) * 0.5F; }
+    // Half-diagonal of the AABB; a simple, cheap-to-compute stand-in for a bounding-sphere
+    // radius that is guaranteed to enclose every vertex.
+    [[nodiscard]] float boundingRadius() const {
+        return glm::length(boundsMax - boundsMin) * 0.5F;
+    }
 
     // Data needed by SkeletalAnimator to compute per-frame bone transforms. Kept minimal: the
     // node hierarchy (parent-relative local transforms) and each bone's inverse bind ("offset")

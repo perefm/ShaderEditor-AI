@@ -4,6 +4,7 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
+#include <glm/common.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <array>
@@ -282,6 +283,27 @@ ModelLoadResult AssimpModelLoader::load(const std::filesystem::path& modelPath) 
     document.boneCount = document.bones.size();
 
     convertAnimations(scene, document);
+
+    // Compute the bind-pose AABB across every vertex of every mesh so the preview camera can
+    // scale zoom/orbit/pan proportionally to this model's actual size instead of assuming the
+    // ~1-unit scale of the built-in primitives.
+    bool hasAnyVertex = false;
+    glm::vec3 boundsMin {0.0F};
+    glm::vec3 boundsMax {0.0F};
+    for (const ModelMesh& mesh : document.meshes) {
+        for (const ModelVertex& vertex : mesh.vertices) {
+            if (!hasAnyVertex) {
+                boundsMin = vertex.position;
+                boundsMax = vertex.position;
+                hasAnyVertex = true;
+            } else {
+                boundsMin = glm::min(boundsMin, vertex.position);
+                boundsMax = glm::max(boundsMax, vertex.position);
+            }
+        }
+    }
+    document.boundsMin = boundsMin;
+    document.boundsMax = boundsMax;
 
     result.success = true;
     return result;

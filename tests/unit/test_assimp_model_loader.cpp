@@ -41,6 +41,11 @@ TEST_CASE("AssimpModelLoader imports the bundled animated Fox model") {
             REQUIRE(vertex.boneWeights.size() == shadereditor::kMaxBonesPerVertex);
         }
     }
+
+    // The computed AABB must be non-degenerate and actually enclose the model's geometry, since
+    // it drives the preview camera's proportional zoom/orbit/pan scaling.
+    REQUIRE(result.document.boundsMax.x > result.document.boundsMin.x);
+    REQUIRE(result.document.boundingRadius() > 0.0F);
 }
 
 TEST_CASE("AssimpModelLoader imports the bundled animated CesiumMan (PBR) model") {
