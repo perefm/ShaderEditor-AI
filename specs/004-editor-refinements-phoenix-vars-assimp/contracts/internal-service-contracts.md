@@ -1,5 +1,11 @@
 # Phase 1 Contracts: Editor Menu Refinements, Phoenix Auto-Uniforms, and Assimp Model Import
 
+**Phoenix reference commit**: `Spontz/Phoenix` @
+`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d` (tag `v4.2.4`, 2026-08-27). All
+Phoenix-derived names in this document (texture uniform names, material
+color uniforms, vertex attribute names, `gBones`) come from that commit's
+`Mesh.cpp`, `Material.h`/`.cpp`, `Model.cpp`, and `ShaderVars.h`.
+
 This project is a native desktop app with no network API, so "contracts" here
 are the internal C++ service/interface signatures that other components and
 tests depend on. Each is a "must implement exactly this" surface for the

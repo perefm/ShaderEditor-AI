@@ -5,6 +5,12 @@
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
+**Phoenix Reference Commit**: `Spontz/Phoenix` @
+[`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d`](https://github.com/Spontz/Phoenix/commit/75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d)
+(tag `v4.2.4`, 2026-08-27). See [research.md](/C:/CODE/ShaderEditor-AI/specs/004-editor-refinements-phoenix-vars-assimp/research.md)
+section 5 for the exact files consulted. If Phoenix is updated later, diff
+those files against the new revision before extending this feature further.
+
 ## Summary
 
 Four related changes to the ShaderEditor desktop app: (1) add a "Save As"

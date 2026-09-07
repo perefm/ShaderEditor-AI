@@ -1,5 +1,13 @@
 # Phase 0 Research: Editor Menu Refinements, Phoenix Auto-Uniforms, and Assimp Model Import
 
+**Phoenix reference commit**: `Spontz/Phoenix` @
+`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d` (tag `v4.2.4`, 2026-08-27,
+https://github.com/Spontz/Phoenix/commit/75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d).
+All Phoenix source excerpts and naming conventions below were read directly
+from this commit. When Phoenix is updated, re-fetch the files listed in
+section 5 at the new commit SHA and diff them against what is described here
+to catch any naming/behavior drift before extending this feature.
+
 ## 1. Save As implementation approach
 
 **Decision**: Reuse the existing Win32 `openFileDialog` helper family in
@@ -120,9 +128,9 @@ the app.
 **Rationale**: FR-015/FR-016/FR-017/FR-018 require byte-for-byte name parity
 with Phoenix's own engine so real Phoenix shaders work unmodified; the only
 reliable way to guarantee this is to mirror Phoenix's actual source
-(`Mesh.cpp`, `Material.cpp`, `Model.cpp`, confirmed via the public
-`Spontz/Phoenix` GitHub repository during spec authoring) rather than
-inventing a new convention.
+(`Mesh.cpp`, `Material.cpp`, `Model.cpp`, read at commit
+`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d` of `Spontz/Phoenix`, tag `v4.2.4`)
+rather than inventing a new convention.
 
 **Alternatives considered**: Using Assimp's default `aiTextureType` names or
 a custom `u_`-prefixed convention — rejected, would break FR-015/FR-016

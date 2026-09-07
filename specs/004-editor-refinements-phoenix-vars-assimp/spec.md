@@ -5,6 +5,19 @@
 **Status**: Draft
 **Input**: User description: "Añadir 'Save As' al menú File; renombrar 'Save Current Shaders' a 'Save shader' y 'Update Shaders' a 'Update Shader'; dar soporte a variables uniform automáticas del motor Phoenix (t, tend, beat, ...) rellenadas por el propio ShaderEditor; dar soporte a abrir modelos 3D con Assimp, reproduciendo el naming de texturas y el soporte de animación de la sección drawScene de Phoenix."
 
+**Phoenix Reference Commit**: All Phoenix-specific behavior in this spec
+(texture/material uniform naming, vertex attribute names, `gBones` upload,
+Assimp post-process flags) is derived from the `Spontz/Phoenix` GitHub
+repository at commit
+[`75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d`](https://github.com/Spontz/Phoenix/commit/75aff215bfb6ee8d18d6c1967e0635ab49eb9c2d)
+(tag `v4.2.4`, 2026-08-27), specifically:
+`Engine/src/sections/drawScene.cpp`, `Engine/src/core/renderer/Mesh.cpp`,
+`Engine/src/core/renderer/Material.h`/`.cpp`, `Engine/src/core/renderer/Model.cpp`,
+and `Engine/src/core/renderer/ShaderVars.h`. If Phoenix's engine is updated
+after this date, compare these files against the new revision and file a
+follow-up spec/change for any naming or behavior drift affecting FR-015
+through FR-018.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Save the current shader under a new name (Priority: P1)
