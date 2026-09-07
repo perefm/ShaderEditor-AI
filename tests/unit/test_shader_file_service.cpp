@@ -32,3 +32,38 @@ TEST_CASE("shader file service loads and saves shader pairs") {
     std::filesystem::remove(vertex);
     std::filesystem::remove(fragment);
 }
+
+TEST_CASE("shader file service saveAs retargets the document to a new single-file shader") {
+    const auto temp = std::filesystem::temp_directory_path();
+    const auto original = temp / "shader_editor_test_original.glsl";
+    const auto renamed = temp / "shader_editor_test_renamed.glsl";
+    {
+        std::ofstream out(original);
+        out << "#type vertex\nvoid mainVert(){}\n#type fragment\nvoid mainFrag(){}";
+    }
+
+    shadereditor::ShaderFileService service;
+    auto document = service.load(original);
+    REQUIRE(document.shaderPath.has_value());
+
+    // saveAs() writes document.source verbatim (mirroring save()), so mutate that field directly
+    // rather than the parsed vertex/fragment sub-sources.
+    document.source = "#type vertex\nvoid mainVert(){}\n#type fragment\nvoid mainFrag2(){}";
+    service.saveAs(document, renamed);
+
+    // saveAs() must retarget the document to the new path and clear any split-file paths so
+    // subsequent save()/load() operate on the single new file, mirroring Application's
+    // "Save As" flow.
+    REQUIRE(document.shaderPath.has_value());
+    REQUIRE(document.shaderPath.value() == renamed);
+    REQUIRE(!document.vertexPath.has_value());
+    REQUIRE(!document.fragmentPath.has_value());
+    REQUIRE(!document.isDirty);
+    REQUIRE(std::filesystem::exists(renamed));
+
+    const auto reloaded = service.load(renamed);
+    REQUIRE(reloaded.fragmentSource.find("void mainFrag2(){}") != std::string::npos);
+
+    std::filesystem::remove(original);
+    std::filesystem::remove(renamed);
+}

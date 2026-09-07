@@ -122,6 +122,36 @@ std::optional<std::filesystem::path> openFileDialog(
     }
     return std::filesystem::path(pathBuffer.data());
 }
+
+// "Save As" needs a native save dialog (as opposed to the open dialog above), which lets the
+// user type a brand-new file name rather than requiring an existing file to be selected.
+std::optional<std::filesystem::path> saveFileDialog(
+    const wchar_t* title,
+    const wchar_t* filter,
+    const wchar_t* defaultExtension,
+    const std::filesystem::path& initialDirectory,
+    const std::filesystem::path& suggestedFileName) {
+    std::vector<wchar_t> pathBuffer(32768, L'\0');
+    const std::wstring suggestedFileNameString = suggestedFileName.wstring();
+    if (!suggestedFileNameString.empty()) {
+        const std::size_t copyLength = std::min(suggestedFileNameString.size(), pathBuffer.size() - 1);
+        std::copy_n(suggestedFileNameString.begin(), copyLength, pathBuffer.begin());
+    }
+    OPENFILENAMEW dialog {};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrTitle = title;
+    dialog.lpstrFilter = filter;
+    dialog.lpstrFile = pathBuffer.data();
+    dialog.nMaxFile = static_cast<DWORD>(pathBuffer.size());
+    const std::wstring initialDirectoryString = initialDirectory.wstring();
+    dialog.lpstrInitialDir = initialDirectoryString.c_str();
+    dialog.lpstrDefExt = defaultExtension;
+    dialog.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
+    if (!GetSaveFileNameW(&dialog)) {
+        return std::nullopt;
+    }
+    return std::filesystem::path(pathBuffer.data());
+}
 #endif
 }
 
@@ -250,6 +280,53 @@ bool Application::openShaderFromDialog() {
 #endif
 }
 
+bool Application::saveShaderAsFromDialog() {
+#ifdef _WIN32
+    // Default to the current document's folder/name so re-saving to a sibling file is a single click.
+    const auto& document = workspace_.editorState().document();
+    std::filesystem::path initialDirectory = executableDirectory();
+    std::filesystem::path suggestedFileName;
+    if (document.shaderPath) {
+        initialDirectory = document.shaderPath->parent_path();
+        suggestedFileName = document.shaderPath->filename();
+    }
+
+    const auto selected = saveFileDialog(
+        L"Save Shader As",
+        L"GLSL Shader (*.glsl)\0*.glsl\0All Files (*.*)\0*.*\0",
+        L"glsl",
+        initialDirectory,
+        suggestedFileName);
+    if (!selected) {
+        return false;
+    }
+
+    return workspace_.saveShadersAs(*selected);
+#else
+    diagnostics_.addError("Native file dialogs are only implemented for Windows in this build.");
+    return false;
+#endif
+}
+
+bool Application::openModelFromDialog() {
+#ifdef _WIN32
+    // Filter list mirrors the formats Assimp's default importer registry handles well for
+    // Phoenix-style content; "All Files" is kept as a fallback for less common formats.
+    const auto selected = openFileDialog(
+        L"Open 3D Model",
+        L"3D Models (*.glb;*.gltf;*.fbx;*.obj;*.dae)\0*.glb;*.gltf;*.fbx;*.obj;*.dae\0All Files (*.*)\0*.*\0",
+        executableDirectory());
+    if (!selected) {
+        return false;
+    }
+
+    return workspace_.openModel(*selected);
+#else
+    diagnostics_.addError("Native file dialogs are only implemented for Windows in this build.");
+    return false;
+#endif
+}
+
 bool Application::openImageForUniform(const std::string& uniformName) {
 #ifdef _WIN32
     const auto selected = openFileDialog(
@@ -277,10 +354,16 @@ void Application::drawMainMenu() {
         if (ImGui::MenuItem("Open Shader...")) {
             openShaderFromDialog();
         }
-        if (ImGui::MenuItem("Save Current Shaders", "Ctrl+S")) {
+        if (ImGui::MenuItem("Open Model...")) {
+            openModelFromDialog();
+        }
+        if (ImGui::MenuItem("Save shader", "Ctrl+S")) {
             workspace_.saveShaders();
         }
-        if (ImGui::MenuItem("Update Shaders", "Ctrl+Enter")) {
+        if (ImGui::MenuItem("Save As...")) {
+            saveShaderAsFromDialog();
+        }
+        if (ImGui::MenuItem("Update Shader", "Ctrl+Enter")) {
             shaderEditorPanel_.pressUpdateButton();
         }
         if (ImGui::MenuItem("Exit")) {
@@ -351,6 +434,10 @@ void Application::drawShaderEditorWindow() {
             workspace_.saveShaders();
         }
         ImGui::SameLine();
+        if (ImGui::Button("Save As")) {
+            saveShaderAsFromDialog();
+        }
+        ImGui::SameLine();
         if (ImGui::Button("Update Shader")) {
             shaderEditorPanel_.pressUpdateButton();
         }
@@ -394,9 +481,84 @@ void Application::drawRenderViewWindow() {
                 renderViewPanel_.choosePrimitive(primitiveIds[index]);
             }
         }
+        // Once a model has been imported (File > Open Model...), let the user switch back and
+        // forth between it and the built-in primitives without re-importing (see
+        // WorkspaceController::selectModel()).
+        if (workspace_.hasLoadedModel()) {
+            ImGui::SameLine();
+            if (ImGui::Button("model")) {
+                workspace_.selectModel();
+            }
+        }
+        // Lets the user import a model directly from this panel, without going through the File
+        // menu; reuses the exact same file dialog/import path as File > Open Model...
+        ImGui::SameLine();
+        if (ImGui::Button("Open Model...")) {
+            openModelFromDialog();
+        }
+
+        // Animation clip picker, shown only when the active model actually has animation clips
+        // to choose from (static/untextured meshes and built-in primitives have none).
+        const std::vector<std::string> animationNames = renderViewPanel_.animationNames();
+        if (!animationNames.empty()) {
+            int selectedIndex = renderViewPanel_.selectedAnimationIndex();
+            // Slot 0 is always "None" (bind pose) so the user can freeze the model's rest pose.
+            const int comboIndex = selectedIndex + 1;
+            std::string previewLabel = selectedIndex < 0 ? "None" : animationNames[static_cast<std::size_t>(selectedIndex)];
+            ImGui::SetNextItemWidth(220.0F);
+            if (ImGui::BeginCombo("Animation", previewLabel.c_str())) {
+                const bool noneSelected = comboIndex == 0;
+                if (ImGui::Selectable("None", noneSelected)) {
+                    renderViewPanel_.selectAnimation(-1);
+                }
+                for (std::size_t index = 0; index < animationNames.size(); ++index) {
+                    const bool isSelected = comboIndex == static_cast<int>(index) + 1;
+                    if (ImGui::Selectable(animationNames[index].c_str(), isSelected)) {
+                        renderViewPanel_.selectAnimation(static_cast<int>(index));
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+        }
         ImGui::Separator();
         if (ImGui::Button("Reset View")) {
             renderViewPanel_.resetView();
+        }
+        ImGui::Separator();
+
+        // Playback transport for Phoenix's time-based auto-uniforms ("t"/"tend"/"beat").
+        const PlaybackClockState& playback = workspace_.playbackClock();
+        if (playback.isPlaying()) {
+            if (ImGui::Button("Pause")) {
+                workspace_.pausePreview();
+            }
+        } else {
+            if (ImGui::Button("Play")) {
+                workspace_.playPreview();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Time")) {
+            workspace_.resetPreview();
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(("t = " + std::to_string(playback.elapsedSeconds())).c_str());
+
+        float sectionDuration = playback.sectionDurationSeconds();
+        ImGui::SetNextItemWidth(100.0F);
+        if (ImGui::InputFloat("tend", &sectionDuration)) {
+            workspace_.setSectionDuration(sectionDuration);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(> 1.0 s; resets t when reached)");
+        ImGui::SameLine();
+        float bpm = playback.bpm();
+        ImGui::SetNextItemWidth(100.0F);
+        if (ImGui::InputFloat("bpm", &bpm)) {
+            workspace_.setBpm(bpm);
         }
         ImGui::Separator();
         const ImVec2 available = ImGui::GetContentRegionAvail();
@@ -601,11 +763,37 @@ void Application::drawShaderHelpWindow() {
     if (ImGui::Begin("Shader Help", &showShaderHelp_)) {
         const std::string helpText =
             "Phoenix GLSL globals supplied by ShaderEditor\n\n"
-            "MVP (mat4): model-view-projection matrix supplied by Phoenix GLSL shader editor.\n"
-            "uCameraPos (vec3): camera position supplied automatically by the engine.\n"
-            "aPos (location 0): vertex position supplied by the preview mesh.\n"
-            "aUv (location 1): UV texture coordinate supplied by the preview mesh.\n"
-            "sampler2D uniforms: choose an image from the Uniforms panel.\n\n"
+            "The uniforms below are computed and uploaded automatically every frame by the app;\n"
+            "they never appear as editable rows in the Uniforms panel, so there is nothing to fill in.\n\n"
+            "Camera / transform:\n"
+            "  MVP (mat4): model-view-projection matrix for the preview camera.\n"
+            "  model (mat4): the preview's model-space rotation matrix (orbit only, no projection);\n"
+            "    used by shaders that need to transform normals/tangents into world space.\n"
+            "  uCameraPos (vec3): current camera position in world space.\n\n"
+            "Playback clock (spec 004 Phoenix auto-uniforms):\n"
+            "  t (float): elapsed seconds since playback was last reset; drives time-based effects.\n"
+            "  tend (float): configured section duration in seconds (Render panel 'tend' field).\n"
+            "  beat (float): normalized phase of the current beat, always in [0, 1); it resets to\n"
+            "    0 on each beat boundary and advances according to the configured BPM.\n\n"
+            "Imported model material (per active mesh, from the model's own Assimp materials):\n"
+            "  Mat_Ka (vec3): ambient color.\n"
+            "  Mat_Kd (vec3): diffuse color.\n"
+            "  Mat_Ks (vec3): specular color.\n"
+            "  Mat_KsStrenght (float): specular strength/shininess.\n"
+            "  texture_diffuseN / texture_specularN / texture_normalsN / texture_heightN / ... (sampler2D):\n"
+            "    one uniform per texture slot the mesh's material carries, named\n"
+            "    \"texture_\" + Phoenix texture type + 1-based index (e.g. texture_diffuse1).\n"
+            "    Bound automatically from the imported model's on-disk or embedded (.glb) images.\n\n"
+            "Skeletal animation (imported models with bones):\n"
+            "  gBones[100] (mat4 array): per-bone skinning matrices for the currently selected\n"
+            "    animation clip (Render panel 'Animation' dropdown), recomputed every frame.\n\n"
+            "Preview mesh vertex attributes (built-in primitives):\n"
+            "  aPos (location 0): vertex position.\n"
+            "  aUv (location 1): UV texture coordinate.\n\n"
+            "Imported model vertex attributes (Phoenix Mesh::setupMesh layout):\n"
+            "  aPos (0), aNormal (1), aTexCoords (2), aTangent (3), aBiTangent (4),\n"
+            "  aBoneID (5, uvec4), aBoneWeight (6, vec4).\n\n"
+            "sampler2D uniforms you declare yourself: choose an image from the Uniforms panel.\n\n"
             "Declare the inputs in the vertex shader and pass values to the fragment shader using out/in variables.";
         std::vector<char> buffer(helpText.begin(), helpText.end());
         buffer.push_back('\0');

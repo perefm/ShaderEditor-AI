@@ -11,6 +11,29 @@
 
 namespace shadereditor {
 namespace {
+// Phoenix engine auto-uniforms recognized by name: their value is supplied automatically by
+// ShaderEditor (playback clock, active mesh material, bone animator) rather than by the user.
+// Each entry pairs the exact Phoenix uniform name with the GLSL type it must declare to be
+// treated as auto-populated; any other type for that name is left as an ordinary user uniform
+// (see data-model.md's "Recognized auto-uniform table").
+bool isPhoenixAutoUniform(const std::string& name, const std::string& type) {
+    if ((name == "t" || name == "tend" || name == "beat") && type == "float") {
+        return true;
+    }
+    if ((name == "Mat_Ka" || name == "Mat_Kd" || name == "Mat_Ks") && type == "vec3") {
+        return true;
+    }
+    if (name == "Mat_KsStrenght" && type == "float") {
+        return true;
+    }
+    // "gBones" is always an array (e.g. "uniform mat4 gBones[100];"); the simple tokenizer below
+    // strips the "[...]" suffix from the name before this check runs, so only the type matters here.
+    if (name == "gBones" && type == "mat4") {
+        return true;
+    }
+    return false;
+}
+
 UniformDefinition makeUniformDefinition(const std::string& type, const std::string& name) {
     UniformDefinition uniform;
     uniform.name = name;
@@ -97,10 +120,23 @@ void collectUniforms(const std::string& source, std::vector<UniformDefinition>& 
             if (!name.empty() && name.back() == ';') {
                 name.pop_back();
             }
-            if (name == "MVP" || name == "uCameraPos") {
+            // Strip an array suffix (e.g. "gBones[100]" -> "gBones") so array declarations like
+            // Phoenix's "uniform mat4 gBones[100];" are matched by plain name/type comparisons.
+            const auto bracketPosition = name.find('[');
+            if (bracketPosition != std::string::npos) {
+                name.erase(bracketPosition);
+            }
+            if (name == "MVP" || name == "uCameraPos" || name == "model") {
                 continue;
             }
-            uniforms.push_back(makeUniformDefinition(type, name));
+            UniformDefinition uniform = makeUniformDefinition(type, name);
+            if (isPhoenixAutoUniform(name, type)) {
+                // Auto-uniforms are computed by the engine every frame, so the Uniforms panel
+                // must never let the user edit them directly (FR-012).
+                uniform.provenance = UniformProvenance::PhoenixAuto;
+                uniform.editable = false;
+            }
+            uniforms.push_back(std::move(uniform));
         }
     }
 }

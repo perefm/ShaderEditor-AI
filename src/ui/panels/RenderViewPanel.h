@@ -4,6 +4,7 @@
 
 #include <glm/vec2.hpp>
 #include <string>
+#include <vector>
 
 namespace shadereditor {
 // Thin UI-facing wrapper around preview rendering and interaction actions.
@@ -19,6 +20,10 @@ class RenderViewPanel {
     const RenderSession& renderPreview(int width, int height);
     [[nodiscard]] std::string summary() const;
     [[nodiscard]] std::string errorMessage() const;
+    // Animation selection passthroughs for the model animation picker (see RenderView panel UI).
+    [[nodiscard]] std::vector<std::string> animationNames() const { return controller_.modelAnimationNames(); }
+    void selectAnimation(int animationIndex) { controller_.selectAnimation(animationIndex); }
+    [[nodiscard]] int selectedAnimationIndex() const { return controller_.selectedAnimationIndex(); }
 
   private:
     WorkspaceController& controller_;

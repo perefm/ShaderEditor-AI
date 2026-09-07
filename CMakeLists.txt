@@ -1,10 +1,23 @@
 ﻿cmake_minimum_required(VERSION 3.27)
 
+# Default to a fully static triplet so the produced executable does not depend on any vcpkg
+# shared libraries (glfw3.dll, assimp-*.dll, etc.) at runtime - only OS/CRT DLLs remain dynamic.
+# This must be set before project() so the vcpkg toolchain picks it up. Users can still override
+# it with -DVCPKG_TARGET_TRIPLET=... on the command line if a shared build is ever needed again.
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static-md" CACHE STRING "Vcpkg target triplet")
+endif()
+
 project(ShaderEditor LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Match vcpkg's "static-md" triplet: statically link every dependency library, but keep using the
+# dynamic (DLL) MSVC C++ runtime so the executable still only needs the standard VC++
+# redistributable, not a fully static CRT.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 string(TIMESTAMP SHADEREDITOR_VERSION_TIMESTAMP "%Y.%m.%d-%H:%M")
 
@@ -17,7 +30,7 @@ endif()
 
 set(SHADEREDITOR_VCPKG_INSTALLED_DIR "")
 if(SHADEREDITOR_VCPKG_ROOT)
-    set(SHADEREDITOR_VCPKG_INSTALLED_DIR "${SHADEREDITOR_VCPKG_ROOT}/installed/x64-windows")
+    set(SHADEREDITOR_VCPKG_INSTALLED_DIR "${SHADEREDITOR_VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}")
 endif()
 
 if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}")
@@ -25,6 +38,7 @@ if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}")
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/glfw3"
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/imgui"
         "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/glad"
+        "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/share/assimp"
     )
 endif()
 
@@ -32,6 +46,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
 find_path(STB_IMAGE_INCLUDE_DIR stb_image.h REQUIRED)
 
 add_library(shader_editor_core
@@ -45,6 +60,8 @@ add_library(shader_editor_core
     src/editor/ShaderEditorState.cpp
     src/rendering/geometry/BuiltInPrimitives.cpp
     src/rendering/geometry/PrimitiveLibrary.cpp
+    src/rendering/models/AssimpModelLoader.cpp
+    src/rendering/models/SkeletalAnimator.cpp
     src/rendering/opengl/PreviewRenderer.cpp
     src/rendering/opengl/PreviewCamera.cpp
     src/rendering/shaders/ShaderProgramService.cpp
@@ -61,7 +78,7 @@ add_library(shader_editor_core
 )
 
 target_include_directories(shader_editor_core PUBLIC src third_party ${STB_IMAGE_INCLUDE_DIR})
-target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32)
+target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32 assimp::assimp)
 target_compile_definitions(shader_editor_core PRIVATE
     SHADEREDITOR_VERSION_TIMESTAMP="${SHADEREDITOR_VERSION_TIMESTAMP}"
 )
@@ -79,14 +96,6 @@ else()
     add_executable(shader_editor src/app/application/main.cpp)
 endif()
 target_link_libraries(shader_editor PRIVATE shader_editor_core)
-
-if(EXISTS "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll")
-    add_custom_command(TARGET shader_editor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${SHADEREDITOR_VCPKG_INSTALLED_DIR}/debug/bin/glfw3.dll"
-            "$<TARGET_FILE_DIR:shader_editor>/glfw3.dll"
-    )
-endif()
 
 # Ship the runtime assets beside the executable so example shaders are resolved from "<exe>/assets".
 add_custom_command(TARGET shader_editor POST_BUILD

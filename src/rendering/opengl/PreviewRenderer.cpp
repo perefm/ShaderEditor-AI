@@ -7,7 +7,9 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
+#include <functional>
 #include <regex>
+#include <string_view>
 #include <utility>
 
 namespace shadereditor {
@@ -117,6 +119,44 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
         return session;
     }
 
+    if (session.renderTargetKind == RenderTargetKind::Model) {
+        // The model render path does not depend on the built-in primitive library at all;
+        // it draws whatever mesh data setActiveModel() cached.
+        if (activeModel_ == nullptr) {
+            session.frameStatus = FrameStatus::Error;
+            session.errorMessage = "No model has been loaded to render.";
+            return session;
+        }
+        if (program_ == 0 ||
+            !ensureFramebuffer(width, height, session.errorMessage) ||
+            !ensureModelGpuResources(session.errorMessage)) {
+            session.programStatus = ProgramStatus::Failed;
+            session.frameStatus = FrameStatus::Error;
+            return session;
+        }
+
+        beginModelFrame(program_, width, height);
+        applyUniforms(program_, session, uniforms);
+        // The animator recomputes bone transforms fresh every frame from the current playback
+        // time, so animation always reflects Play/Pause/Reset state exactly (no stale caching).
+        const std::vector<glm::mat4> boneTransforms =
+            skeletalAnimator_.boneTransforms(*activeModel_, session.playback.elapsedSeconds(), session.selectedAnimationIndex);
+        for (std::size_t meshIndex = 0; meshIndex < activeModel_->meshes.size(); ++meshIndex) {
+            renderModelMesh(activeModel_->meshes[meshIndex], activeModelBuffers_[meshIndex], program_, boneTransforms);
+        }
+
+        glBindVertexArray(0);
+        glUseProgram(0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        session.previewTextureId = colorTexture_;
+        session.previewWidth = width;
+        session.previewHeight = height;
+        session.frameStatus = FrameStatus::Rendering;
+        session.errorMessage.clear();
+        return session;
+    }
+
     const auto* primitive = library_.findById(session.selectedPrimitiveId);
     if (primitive == nullptr) {
         session.frameStatus = FrameStatus::Error;
@@ -185,6 +225,20 @@ void PreviewRenderer::destroyGpuResources() {
         glDeleteFramebuffers(1, &framebuffer_);
         framebuffer_ = 0;
     }
+
+    for (auto& buffers : activeModelBuffers_) {
+        if (buffers.indexBuffer != 0) {
+            glDeleteBuffers(1, &buffers.indexBuffer);
+        }
+        if (buffers.vertexBuffer != 0) {
+            glDeleteBuffers(1, &buffers.vertexBuffer);
+        }
+        if (buffers.vao != 0) {
+            glDeleteVertexArrays(1, &buffers.vao);
+        }
+    }
+    activeModelBuffers_.clear();
+    activeModelGpuResourcesReady_ = false;
 }
 
 bool PreviewRenderer::hasOpenGlContext() const { return glfwGetCurrentContext() != nullptr; }
@@ -316,6 +370,165 @@ bool PreviewRenderer::ensureMesh(const PreviewPrimitive& primitive, std::string&
     return true;
 }
 
+std::vector<std::string> PreviewRenderer::activeModelAnimationNames() const {
+    std::vector<std::string> names;
+    if (activeModel_ == nullptr) {
+        return names;
+    }
+    names.reserve(activeModel_->animations.size());
+    for (const auto& clip : activeModel_->animations) {
+        // Some formats (e.g. FBX) leave clip names blank; fall back to an index-based label so
+        // every entry is still selectable and distinguishable in the UI.
+        names.push_back(clip.name.empty() ? ("Animation " + std::to_string(names.size())) : clip.name);
+    }
+    return names;
+}
+
+bool PreviewRenderer::setActiveModel(ModelDocument document) {
+    if (document.meshes.empty()) {
+        return false;
+    }
+    // Any previously loaded model's GPU buffers are stale once the CPU-side document changes;
+    // drop them so ensureModelGpuResources() rebuilds everything for the new model next frame.
+    for (auto& buffers : activeModelBuffers_) {
+        if (buffers.indexBuffer != 0) {
+            glDeleteBuffers(1, &buffers.indexBuffer);
+        }
+        if (buffers.vertexBuffer != 0) {
+            glDeleteBuffers(1, &buffers.vertexBuffer);
+        }
+        if (buffers.vao != 0) {
+            glDeleteVertexArrays(1, &buffers.vao);
+        }
+    }
+    activeModelBuffers_.clear();
+    activeModelGpuResourcesReady_ = false;
+    activeModel_ = std::make_unique<ModelDocument>(std::move(document));
+    return true;
+}
+
+bool PreviewRenderer::ensureModelGpuResources(std::string& errorMessage) {
+    if (activeModelGpuResourcesReady_ || activeModel_ == nullptr) {
+        return activeModel_ != nullptr;
+    }
+    if (!hasOpenGlContext()) {
+        errorMessage = "No OpenGL context is available to upload the imported model.";
+        return false;
+    }
+
+    activeModelBuffers_.resize(activeModel_->meshes.size());
+    for (std::size_t meshIndex = 0; meshIndex < activeModel_->meshes.size(); ++meshIndex) {
+        const ModelMesh& mesh = activeModel_->meshes[meshIndex];
+        ModelMeshBuffers& buffers = activeModelBuffers_[meshIndex];
+
+        glGenVertexArrays(1, &buffers.vao);
+        glGenBuffers(1, &buffers.vertexBuffer);
+        glGenBuffers(1, &buffers.indexBuffer);
+
+        glBindVertexArray(buffers.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, buffers.vertexBuffer);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(mesh.vertices.size() * sizeof(ModelVertex)),
+            mesh.vertices.data(),
+            GL_STATIC_DRAW);
+
+        // Attribute layout matches Phoenix's Mesh::setupMesh exactly (see ModelDocument.h):
+        // location 0 = aPos, 1 = aNormal, 2 = aTexCoords, 3 = aTangent, 4 = aBiTangent,
+        // 5 = aBoneID (integer attribute), 6 = aBoneWeight.
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, position)));
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, normal)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, texCoords)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, tangent)));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, biTangent)));
+        glEnableVertexAttribArray(4);
+        glVertexAttribIPointer(5, 4, GL_UNSIGNED_INT, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, boneIds)));
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(ModelVertex), reinterpret_cast<void*>(offsetof(ModelVertex, boneWeights)));
+        glEnableVertexAttribArray(6);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers.indexBuffer);
+        glBufferData(
+            GL_ELEMENT_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(mesh.indices.size() * sizeof(unsigned int)),
+            mesh.indices.data(),
+            GL_STATIC_DRAW);
+        buffers.indexCount = static_cast<GLsizei>(mesh.indices.size());
+
+        glBindVertexArray(0);
+    }
+
+    activeModelGpuResourcesReady_ = true;
+    return true;
+}
+
+GLuint PreviewRenderer::textureForPath(const std::filesystem::path& path) {
+    const std::string key = path.string();
+    const auto cached = textures_.find(key);
+    if (cached != textures_.end()) {
+        return cached->second;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    // glTF/Assimp UV coordinates use a top-left image origin, while OpenGL samples texture
+    // rows from the bottom. Flip decoded image data once so model UVs remain unchanged and
+    // external and embedded textures use the same convention.
+    stbi_set_flip_vertically_on_load(1);
+    stbi_uc* pixels = stbi_load(key.c_str(), &width, &height, &channels, 4);
+    if (pixels == nullptr) {
+        return 0;
+    }
+
+    const GLuint texture = uploadRgbaTexture(pixels, width, height);
+    stbi_image_free(pixels);
+    textures_.emplace(key, texture);
+    return texture;
+}
+
+GLuint PreviewRenderer::textureForEmbeddedData(const std::vector<unsigned char>& encodedBytes) {
+    // Embedded (glTF/.glb) textures have no file path, so cache them by a hash of their encoded
+    // bytes instead - cheap to compute once per mesh load and stable across frames.
+    const std::size_t key = std::hash<std::string_view>{}(
+        std::string_view(reinterpret_cast<const char*>(encodedBytes.data()), encodedBytes.size()));
+    const std::string cacheKey = "embedded:" + std::to_string(key);
+    const auto cached = textures_.find(cacheKey);
+    if (cached != textures_.end()) {
+        return cached->second;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(1);
+    stbi_uc* pixels = stbi_load_from_memory(encodedBytes.data(), static_cast<int>(encodedBytes.size()), &width, &height, &channels, 4);
+    if (pixels == nullptr) {
+        return 0;
+    }
+
+    const GLuint texture = uploadRgbaTexture(pixels, width, height);
+    stbi_image_free(pixels);
+    textures_.emplace(cacheKey, texture);
+    return texture;
+}
+
+GLuint PreviewRenderer::uploadRgbaTexture(const unsigned char* pixels, int width, int height) {
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    return texture;
+}
+
 void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms) {
     glUseProgram(program);
 
@@ -331,11 +544,36 @@ void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session
         const glm::vec3 cameraPosition = previewCamera_.position(session.interactionState);
         glUniform3fv(cameraLocation, 1, glm::value_ptr(cameraPosition));
     }
+    const GLint modelLocation = glGetUniformLocation(program, "model");
+    if (modelLocation >= 0) {
+        // Phoenix shaders (bone_animation/bump_mapping/pbr_animation, etc.) declare a "model"
+        // uniform for transforming normals/tangents into world space; like MVP/uCameraPos this
+        // is entirely owned by the preview camera, never user-edited (see FR-012).
+        const glm::mat4 model = previewCamera_.modelMatrix(session.interactionState);
+        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, glm::value_ptr(model));
+    }
 
     int textureUnit = 0;
     for (const auto& uniform : uniforms) {
         const GLint location = glGetUniformLocation(program, uniform.name.c_str());
-        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos") {
+        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos" || uniform.name == "model") {
+            continue;
+        }
+
+        // Phoenix auto-uniforms are driven live by the playback clock every frame, overriding
+        // whatever stale value might be cached in RenderSession::uniformValues for that name
+        // (FR-009/FR-010: the app - not the user - controls t/tend/beat).
+        if (uniform.provenance == UniformProvenance::PhoenixAuto) {
+            if (uniform.name == "t") {
+                glUniform1f(location, session.playback.elapsedSeconds());
+            } else if (uniform.name == "tend") {
+                glUniform1f(location, session.playback.sectionDurationSeconds());
+            } else if (uniform.name == "beat") {
+                glUniform1f(location, session.playback.beat());
+            }
+            // Mat_Ka/Mat_Kd/Mat_Ks/Mat_KsStrenght/gBones are uploaded separately, per active mesh,
+            // by the model-rendering path (see renderModel/applyMaterialUniforms) since their
+            // values depend on which mesh is currently bound, not on global playback state.
             continue;
         }
 
@@ -420,5 +658,72 @@ void PreviewRenderer::renderPrimitive(const PreviewPrimitive& primitive, GLuint 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(program);
     glBindVertexArray(meshes_.at(primitive.id).vao);
+}
+
+void PreviewRenderer::beginModelFrame(GLuint program, int width, int height) {
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+    glViewport(0, 0, width, height);
+    glEnable(GL_DEPTH_TEST);
+    glClearColor(0.09F, 0.10F, 0.13F, 1.0F);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(program);
+}
+
+void PreviewRenderer::renderModelMesh(const ModelMesh& mesh,
+                                      const ModelMeshBuffers& buffers,
+                                      GLuint program,
+                                      const std::vector<glm::mat4>& boneTransforms) {
+    // Upload the material colors using Phoenix's exact uniform names (FR-016) so bump-mapping,
+    // PBR, etc. shaders authored against Phoenix conventions work unmodified against imports.
+    const GLint ambientLocation = glGetUniformLocation(program, "Mat_Ka");
+    if (ambientLocation >= 0) {
+        glUniform3fv(ambientLocation, 1, glm::value_ptr(mesh.material.colorAmbient));
+    }
+    const GLint diffuseLocation = glGetUniformLocation(program, "Mat_Kd");
+    if (diffuseLocation >= 0) {
+        glUniform3fv(diffuseLocation, 1, glm::value_ptr(mesh.material.colorDiffuse));
+    }
+    const GLint specularLocation = glGetUniformLocation(program, "Mat_Ks");
+    if (specularLocation >= 0) {
+        glUniform3fv(specularLocation, 1, glm::value_ptr(mesh.material.colorSpecular));
+    }
+    const GLint specularStrengthLocation = glGetUniformLocation(program, "Mat_KsStrenght");
+    if (specularStrengthLocation >= 0) {
+        glUniform1f(specularStrengthLocation, mesh.material.specularStrength);
+    }
+
+    // Upload bone matrices as the gBones[] array (FR-014), matching Phoenix's skinning shaders.
+    // Static (non-skeletal) meshes simply have no gBones uniform declared, so the lookup is a no-op.
+    if (!boneTransforms.empty()) {
+        const GLint bonesLocation = glGetUniformLocation(program, "gBones");
+        if (bonesLocation >= 0) {
+            glUniformMatrix4fv(bonesLocation, static_cast<GLsizei>(boneTransforms.size()), GL_FALSE, glm::value_ptr(boneTransforms.front()));
+        }
+    }
+
+    // Bind every texture slot the mesh's material carries, using the exact Phoenix uniform name
+    // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015). Textures
+    // may either live on disk (sourcePath) or be embedded directly in the model file (glTF/.glb),
+    // in which case embeddedImageData holds the still-encoded bytes to decode instead.
+    int textureUnit = 0;
+    for (const auto& slot : mesh.material.textureSlots) {
+        const GLint location = glGetUniformLocation(program, slot.shaderUniformName.c_str());
+        if (location < 0) {
+            continue;
+        }
+        const GLuint texture = slot.embeddedImageData.empty()
+                                    ? textureForPath(slot.sourcePath)
+                                    : textureForEmbeddedData(slot.embeddedImageData);
+        if (texture == 0) {
+            continue;
+        }
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(location, textureUnit);
+        ++textureUnit;
+    }
+
+    glBindVertexArray(buffers.vao);
+    glDrawElements(GL_TRIANGLES, buffers.indexCount, GL_UNSIGNED_INT, nullptr);
 }
 }  // namespace shadereditor

@@ -75,5 +75,19 @@ void ShaderFileService::save(ShaderPairDocument& document) const {
     }
     throw std::runtime_error("Cannot save shader without a .glsl file path");
 }
+
+void ShaderFileService::saveAs(ShaderPairDocument& document, const std::filesystem::path& newPath) const {
+    std::ofstream output(newPath, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        throw std::runtime_error("Unable to save shader as: " + newPath.string());
+    }
+    output << document.source;
+    // Re-target the document to the new path. Legacy vertex/fragment paths are cleared because
+    // "Save As" always produces a single unified Phoenix .glsl document going forward.
+    document.shaderPath = newPath;
+    document.vertexPath.reset();
+    document.fragmentPath.reset();
+    document.markSaved();
+}
 }  // namespace shadereditor
 
