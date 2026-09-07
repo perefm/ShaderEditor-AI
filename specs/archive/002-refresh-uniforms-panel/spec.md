@@ -1,6 +1,6 @@
 # Feature Specification: Live Uniform Panel Refresh on Shader Recompile
 
-**Feature Branch**: `002-refresh-uniforms-panel`
+**Branch**: `main`
 **Created**: 2026-09-07
 **Status**: Complete
 **Input**: User description: "Refresh the Uniforms panel automatically whenever the shader is recompiled, so it always lists the uniforms currently declared in the active shader pair and lets the user edit their values from the panel"

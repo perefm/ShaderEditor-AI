@@ -1,6 +1,6 @@
 # Implementation Plan: Multiplatform Shader Editor
 
-**Branch**: `001-shader-editor` | **Date**: 2026-04-11 | **Spec**: [spec.md](./spec.md)
+**Branch**: `main` | **Date**: 2026-04-11 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/archive/001-shader-editor/spec.md`
 
 ## Summary

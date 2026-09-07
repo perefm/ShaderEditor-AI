@@ -1,6 +1,6 @@
 # Feature Specification: Phoenix Single-File GLSL Shader Editor
 
-**Feature Branch**: `003-phoenix-glsl-shader-editor`
+**Branch**: `main`
 **Created**: 2026-09-07
 **Status**: Complete
 **Graphics API**: OpenGL 4.6 core profile / GLSL 4.60

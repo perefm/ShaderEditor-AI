@@ -1,6 +1,6 @@
 # Implementation Plan: Phoenix Single-File GLSL Shader Editor
 
-**Branch**: `003-phoenix-glsl-shader-editor` | **Date**: 2026-09-07 | **Spec**: [spec.md](./spec.md)
+**Branch**: `main` | **Date**: 2026-09-07 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/archive/003-phoenix-glsl-shader-editor/spec.md`
 
 ## Summary

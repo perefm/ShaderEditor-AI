@@ -1,6 +1,6 @@
 # Tasks: Multiplatform Shader Editor
 
-**Input**: Design documents from `/specs/001-shader-editor/`
+**Input**: Design documents from `/specs/archive/001-shader-editor/` (implemented on `main`)
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
 **Tests**: Every story and shared foundation change includes at least one
@@ -68,7 +68,7 @@ save them, reopen them, and confirm the saved content matches the edits.
 ### Verification for User Story 1
 
 - [X] T020 [P] [US1] Add unit tests for file loading, save behavior, and dirty-state transitions in tests/unit/test_shader_file_service.cpp
-- [X] T021 [P] [US1] Add manual validation steps for shader open/save workflows in specs/001-shader-editor/quickstart.md
+- [X] T021 [P] [US1] Add manual validation steps for shader open/save workflows in specs/archive/001-shader-editor/quickstart.md
 
 ### Implementation for User Story 1
 
@@ -94,7 +94,7 @@ change.
 ### Verification for User Story 2
 
 - [X] T027 [P] [US2] Add unit tests for primitive selection, shader update triggers, and uniform value application in tests/unit/test_render_session.cpp
-- [X] T028 [P] [US2] Add manual validation steps for preview model switching, update triggers, and uniform editing in specs/001-shader-editor/quickstart.md
+- [X] T028 [P] [US2] Add manual validation steps for preview model switching, update triggers, and uniform editing in specs/archive/001-shader-editor/quickstart.md
 
 ### Implementation for User Story 2
 
@@ -122,7 +122,7 @@ previewing them without losing workspace state.
 
 ### Verification for User Story 3
 
-- [X] T038 [P] [US3] Add manual validation steps for dock and layout persistence workflows in specs/001-shader-editor/quickstart.md
+- [X] T038 [P] [US3] Add manual validation steps for dock and layout persistence workflows in specs/archive/001-shader-editor/quickstart.md
 - [X] T039 [P] [US3] Add unit tests for workspace layout serialization in tests/unit/test_workspace_layout.cpp
 
 ### Implementation for User Story 3
@@ -141,13 +141,13 @@ previewing them without losing workspace state.
 
 **Purpose**: Finish documentation, validation, and cross-story quality work
 
-- [X] T045 [P] Add cross-platform build notes and dependency setup guidance in specs/001-shader-editor/quickstart.md
+- [X] T045 [P] Add cross-platform build notes and dependency setup guidance in specs/archive/001-shader-editor/quickstart.md
 - [X] T046 Improve application-level logging and user-visible status reporting in src/app/application/Application.cpp and src/app/workspace/DiagnosticsState.cpp
 - [X] T047 [P] Add sample shader assets for smoke testing in assets/shaders/basic.vert and assets/shaders/basic.frag
-- [X] T048 [P] Add final smoke-test checklist coverage for quickstart validation in specs/001-shader-editor/quickstart.md
+- [X] T048 [P] Add final smoke-test checklist coverage for quickstart validation in specs/archive/001-shader-editor/quickstart.md
 - [X] T049 Run the documented build and smoke validation flow and capture any follow-up fixes in specs/archive/001-shader-editor/quickstart.md
 - [X] T074 [P] Create a repository README with application overview, feature usage, and build instructions in README.md
-- [X] T075 Build and validate the Release configuration of the application in build-vcpkg/ and document the exact command flow in specs/001-shader-editor/quickstart.md
+- [X] T075 Build and validate the Release configuration of the application in build-vcpkg/ and document the exact command flow in specs/archive/001-shader-editor/quickstart.md
 
 ---
 
@@ -157,7 +157,7 @@ previewing them without losing workspace state.
 
 **CRITICAL**: Complete this phase before implementing mouse-driven camera control or matrix uniform editing
 
-- [X] T050 Update dependency and build wiring so GLM is a required library in vcpkg.json, CMakeLists.txt, and specs/001-shader-editor/quickstart.md
+- [X] T050 Update dependency and build wiring so GLM is a required library in vcpkg.json, CMakeLists.txt, and specs/archive/001-shader-editor/quickstart.md
 - [X] T051 [P] Add GLM-backed preview camera and interaction state models in src/rendering/opengl/PreviewCamera.h, src/rendering/opengl/PreviewCamera.cpp, src/app/workspace/PreviewInteractionState.h, and src/app/workspace/PreviewInteractionState.cpp
 - [X] T052 [P] Refactor render-domain math types to use GLM vectors and matrices in src/rendering/geometry/PreviewPrimitive.h, src/rendering/shaders/UniformDefinition.h, src/rendering/shaders/RenderSession.h, and src/app/workspace/UniformState.h
 - [X] T053 Refactor the OpenGL preview pipeline to use GLM for transforms, camera matrices, and uniform upload helpers in src/rendering/opengl/PreviewRenderer.h and src/rendering/opengl/PreviewRenderer.cpp
@@ -175,7 +175,7 @@ previewing them without losing workspace state.
 
 ### Verification for User Story 4
 
-- [X] T055 [P] [US4] Add manual validation steps for left-drag rotation and right-drag panning in specs/001-shader-editor/quickstart.md
+- [X] T055 [P] [US4] Add manual validation steps for left-drag rotation and right-drag panning in specs/archive/001-shader-editor/quickstart.md
 - [X] T056 [P] [US4] Add unit tests for preview interaction deltas, camera orbit limits, and pan accumulation in tests/unit/test_preview_camera.cpp
 
 ### Implementation for User Story 4
@@ -198,7 +198,7 @@ previewing them without losing workspace state.
 ### Verification for User Story 5
 
 - [X] T061 [P] [US5] Add unit tests for uniform discovery, default values, and shape-safe updates for vec2/vec3/vec4/mat2/mat3/mat4 in tests/unit/test_uniform_introspection.cpp and tests/unit/test_workspace_models.cpp
-- [X] T062 [P] [US5] Add manual validation steps for extended uniform editing in specs/001-shader-editor/quickstart.md
+- [X] T062 [P] [US5] Add manual validation steps for extended uniform editing in specs/archive/001-shader-editor/quickstart.md
 
 ### Implementation for User Story 5
 
@@ -220,7 +220,7 @@ previewing them without losing workspace state.
 
 ### Verification for User Story 6
 
-- [X] T068 [P] [US6] Add a manual code-review checklist for GLM-only math usage and comment coverage in specs/001-shader-editor/quickstart.md
+- [X] T068 [P] [US6] Add a manual code-review checklist for GLM-only math usage and comment coverage in specs/archive/001-shader-editor/quickstart.md
 - [X] T069 [P] [US6] Run full regression verification for build, tests, preview navigation, docking, and extended uniforms in specs/archive/001-shader-editor/quickstart.md
 
 ### Implementation for User Story 6
@@ -285,7 +285,7 @@ previewing them without losing workspace state.
 
 ```bash
 # Launch independent verification work for User Story 4 together:
-Task: "Add manual validation steps for left-drag rotation and right-drag panning in specs/001-shader-editor/quickstart.md"
+Task: "Add manual validation steps for left-drag rotation and right-drag panning in specs/archive/001-shader-editor/quickstart.md"
 Task: "Add unit tests for preview interaction deltas, camera orbit limits, and pan accumulation in tests/unit/test_preview_camera.cpp"
 
 # Launch implementation work that can proceed in parallel after verification:

@@ -1,6 +1,6 @@
 # Implementation Plan: Live Uniform Panel Refresh on Shader Recompile
 
-**Branch**: `002-refresh-uniforms-panel` | **Date**: 2026-09-07 | **Spec**: [spec.md](./spec.md)
+**Branch**: `main` | **Date**: 2026-09-07 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/archive/002-refresh-uniforms-panel/spec.md`
 
 ## Summary

@@ -38,7 +38,7 @@ editable from the `Uniforms` panel.
 
 ```text
 src/      Application, workspace, rendering, and UI code
-assets/   Sample shader assets and primitive placeholders
+assets/   Bundled GLSL shader assets
 tests/    Catch2 unit tests
 specs/    Archived Spec Kit feature artifacts
 ```
