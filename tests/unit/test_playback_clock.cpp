@@ -23,6 +23,38 @@ TEST_CASE("playback clock advances elapsed time only while playing") {
     REQUIRE(clock.elapsedSeconds() == 2.0F);
 }
 
+TEST_CASE("playback clock resets elapsed time when section duration is reached") {
+    shadereditor::PlaybackClockState clock;
+    clock.setSectionDurationSeconds(2.0F);
+
+    clock.advance(1.5F);
+    REQUIRE(clock.elapsedSeconds() == 1.5F);
+    clock.advance(0.5F);
+    REQUIRE(clock.elapsedSeconds() == 0.0F);
+}
+
+TEST_CASE("playback clock resets elapsed time when section duration is shortened below t") {
+    shadereditor::PlaybackClockState clock;
+    clock.setSectionDurationSeconds(5.0F);
+    clock.advance(4.0F);
+
+    clock.setSectionDurationSeconds(3.0F);
+
+    REQUIRE(clock.elapsedSeconds() == 0.0F);
+    REQUIRE(clock.sectionDurationSeconds() == 3.0F);
+}
+
+TEST_CASE("playback clock clamps section duration to a value greater than one second") {
+    shadereditor::PlaybackClockState clock;
+
+    clock.setSectionDurationSeconds(0.0F);
+    REQUIRE(clock.sectionDurationSeconds() > 1.0F);
+    clock.setSectionDurationSeconds(1.0F);
+    REQUIRE(clock.sectionDurationSeconds() > 1.0F);
+    clock.setSectionDurationSeconds(-10.0F);
+    REQUIRE(clock.sectionDurationSeconds() > 1.0F);
+}
+
 TEST_CASE("playback clock advance ignores non-positive deltas") {
     shadereditor::PlaybackClockState clock;
     clock.advance(1.0F);

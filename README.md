@@ -39,7 +39,8 @@ uniforms in the `Uniforms` panel:
   and tangents.
 - `uniform vec3 uCameraPos`: current camera position in preview world space.
 - `uniform float t`: elapsed playback time in seconds.
-- `uniform float tend`: configured playback section duration in seconds.
+- `uniform float tend`: configured playback section duration in seconds; it
+  is always greater than `1.0` and reaching it resets `t` to `0.0`.
 - `uniform float beat`: normalized current beat phase in `[0, 1)`, derived from
   elapsed time and BPM; it resets to `0` at each beat boundary.
 - `uniform vec3 Mat_Ka`, `Mat_Kd`, `Mat_Ks`: active mesh ambient, diffuse, and

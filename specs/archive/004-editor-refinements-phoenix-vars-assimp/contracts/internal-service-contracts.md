@@ -59,12 +59,12 @@ class PlaybackClockState {
     void reset();                       // elapsedSeconds = 0; play state/tend/bpm untouched
     void advance(float deltaSeconds);    // no-op if !isPlaying()
 
-    void setSectionDurationSeconds(float value);
+    void setSectionDurationSeconds(float value); // clamps to > 1.0s and resets t if reached
     void setBpm(float value);
 
     [[nodiscard]] bool isPlaying() const;
     [[nodiscard]] float elapsedSeconds() const;         // -> "t"
-    [[nodiscard]] float sectionDurationSeconds() const; // -> "tend"
+    [[nodiscard]] float sectionDurationSeconds() const; // -> "tend", always > 1.0s
     [[nodiscard]] float bpm() const;
     [[nodiscard]] float beat() const; // bpm <= 0 ? 0 : fract(elapsedSeconds * bpm / 60), always [0, 1)
 };

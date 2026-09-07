@@ -264,9 +264,10 @@ the plain diffuse lighting used elsewhere.
 - What happens when BPM is set to 0 or a negative value? Per FR-010, `beat`
   MUST be held at 0 in that case rather than producing NaN/Inf. For positive
   BPM, `beat` is the normalized phase in `[0, 1)`, wrapping at each beat.
-- What happens when `tend` is 0? Since `t`/`beat` do not divide by `tend` in
-  this spec (that ratio, if any, is left to the shader author), no special
-  handling beyond passing the literal value is required in this iteration.
+- What happens when `tend` is set to `1.0` or below? The clock clamps it to a
+  value strictly greater than `1.0`. When `t` reaches the configured `tend`,
+  or when `tend` is changed below the current `t`, elapsed time resets to
+  `0.0`.
 - What happens when a model file contains more bones than a single mesh's
   `gBones` array can support in one draw call? The system MUST apply
   Assimp's `aiProcess_SplitByBoneCount` post-process step during import, so
@@ -412,6 +413,10 @@ the plain diffuse lighting used elsewhere.
 - **FR-032**: Runtime assets MUST include an animated material-only shader that
   uses `Mat_Ka`, `Mat_Kd`, `Mat_Ks`, and `Mat_KsStrenght` without texture
   sampling.
+- **FR-033**: `tend` MUST always be strictly greater than `1.0` seconds. When
+  advancing playback reaches or exceeds `tend`, `t` MUST reset to `0.0`.
+  Changing `tend` to a value below or equal to the current `t` MUST also reset
+  `t` to `0.0`.
 
 ### Key Entities *(include if feature involves data)*
 

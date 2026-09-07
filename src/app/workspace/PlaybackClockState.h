@@ -8,12 +8,13 @@ namespace shadereditor {
 // PreviewInteractionState, but for time instead of camera framing.
 //
 // - "t"    -> elapsedSeconds(): seconds since the clock was last reset, frozen while paused.
-// - "tend" -> sectionDurationSeconds(): a user-editable "section length" value; Phoenix shaders
-//             typically use it to normalize/loop time (t / tend), but this app does not impose
-//             that math itself - it simply supplies the raw value the shader author chose.
+// - "tend" -> sectionDurationSeconds(): a user-editable section length greater than 1 second.
+//             Reaching or changing to a duration below the current t resets elapsed time to 0.
 // - "beat" -> beat(): derived from elapsedSeconds() and bpm(), so it can never drift out of sync.
 class PlaybackClockState {
   public:
+    static constexpr float kMinimumSectionDurationSeconds {1.0001F};
+
     // Starts/stops advancing elapsedSeconds(); does not touch its current value.
     void play() { isPlaying_ = true; }
     void pause() { isPlaying_ = false; }
@@ -24,10 +25,18 @@ class PlaybackClockState {
     void advance(float deltaSeconds) {
         if (isPlaying_ && deltaSeconds > 0.0F) {
             elapsedSeconds_ += deltaSeconds;
+            if (elapsedSeconds_ >= sectionDurationSeconds_) {
+                elapsedSeconds_ = 0.0F;
+            }
         }
     }
 
-    void setSectionDurationSeconds(float value) { sectionDurationSeconds_ = value; }
+    void setSectionDurationSeconds(float value) {
+        sectionDurationSeconds_ = value > kMinimumSectionDurationSeconds ? value : kMinimumSectionDurationSeconds;
+        if (elapsedSeconds_ >= sectionDurationSeconds_) {
+            elapsedSeconds_ = 0.0F;
+        }
+    }
     void setBpm(float value) { bpm_ = value; }
 
     [[nodiscard]] bool isPlaying() const { return isPlaying_; }

@@ -50,13 +50,19 @@ Constitution Check ("Verification"). Run after building `shader_editor`
    expression in the shader like coloring based on `tend`) that the shader
    receives the exact new value on the next frame, regardless of Play/Pause
    state.
-6. Edit the BPM field to a positive value; verify `beat`-driven visuals pulse
+6. Set `tend` to `1.0`, `0.0`, or a negative number; verify the displayed
+   value is clamped to a value strictly greater than `1.0`.
+7. Let playback reach `tend`; verify `t` resets to `0.0` and starts advancing
+   again from the beginning.
+8. While `t` is above a proposed new `tend`, reduce the `tend` field; verify
+   `t` resets immediately to `0.0`.
+9. Edit the BPM field to a positive value; verify `beat`-driven visuals pulse
    accordingly. Set BPM to 0 or a negative number; verify no NaN/flicker/crash
    and that `beat`-driven visuals hold steady (beat pinned at 0).
-7. Open the Uniforms panel; verify `t`, `tend`, and `beat` (when declared by
+10. Open the Uniforms panel; verify `t`, `tend`, and `beat` (when declared by
    the shader) are shown as read-only/auto-managed, with no editable control,
    distinct from ordinary user uniforms.
-8. Open/write a shader that does NOT declare `t`/`tend`/`beat` at all; verify
+11. Open/write a shader that does NOT declare `t`/`tend`/`beat` at all; verify
    it still compiles/runs with no warnings about their absence.
 
 ## 4. Assimp model import (User Story 4)

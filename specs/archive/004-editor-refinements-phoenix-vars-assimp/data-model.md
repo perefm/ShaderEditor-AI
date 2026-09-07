@@ -9,7 +9,7 @@ Owned by `WorkspaceController`. Value-type state analogous to
 |---|---|---|
 | `isPlaying` | `bool` | Default `true`. Toggled by Play/Pause UI actions. |
 | `elapsedSeconds` | `float` | The `t` uniform value. Advances by frame delta time while `isPlaying`. Never negative. |
-| `sectionDurationSeconds` | `float` | The `tend` uniform value. User-editable at any time; independent of `isPlaying`. Default e.g. `60.0F`. |
+| `sectionDurationSeconds` | `float` | The `tend` uniform value. User-editable at any time; clamped strictly above `1.0F`. Reaching it resets `elapsedSeconds` to `0.0F`. |
 | `bpm` | `float` | User-editable. Default e.g. `120.0F`. May be set to 0 or negative by the user. |
 
 Derived:
@@ -154,6 +154,8 @@ operate on the new path.
 - **Animation selection**: `selectedAnimationIndex == -1` produces the bind
   pose; a valid index samples that `AnimationClip` in a loop. New models
   default to their first clip when one exists.
+- **Section duration**: `tend` is clamped to a value strictly greater than
+  `1.0F`; advancing to or changing below the current `tend` resets `t` to zero.
 
 ## Closure
 

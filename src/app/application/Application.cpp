@@ -553,6 +553,8 @@ void Application::drawRenderViewWindow() {
             workspace_.setSectionDuration(sectionDuration);
         }
         ImGui::SameLine();
+        ImGui::TextDisabled("(> 1.0 s; resets t when reached)");
+        ImGui::SameLine();
         float bpm = playback.bpm();
         ImGui::SetNextItemWidth(100.0F);
         if (ImGui::InputFloat("bpm", &bpm)) {
