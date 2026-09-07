@@ -124,7 +124,7 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
         return session;
     }
 
-    if (!ensureProgram(document, session.errorMessage) ||
+    if (program_ == 0 ||
         !ensureFramebuffer(width, height, session.errorMessage) ||
         !ensureMesh(*primitive, session.errorMessage)) {
         session.programStatus = ProgramStatus::Failed;

@@ -291,7 +291,7 @@ void Application::drawMainMenu() {
 
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Shader Editor", nullptr, &showShaderEditor_);
-        ImGui::MenuItem("Render View", nullptr, &showRenderView_);
+        ImGui::MenuItem("Render", nullptr, &showRenderView_);
         ImGui::MenuItem("Uniforms", nullptr, &showUniforms_);
         ImGui::MenuItem("Diagnostics", nullptr, &showDiagnostics_);
         ImGui::MenuItem("Shader Errors", nullptr, &showShaderErrors_);
@@ -384,8 +384,7 @@ void Application::drawRenderViewWindow() {
         return;
     }
 
-    if (ImGui::Begin("Render View", &showRenderView_)) {
-        ImGui::Text("Preview: %s", renderViewPanel_.summary().c_str());
+    if (ImGui::Begin("Render", &showRenderView_)) {
         const std::array<const char*, 5> primitiveIds {"plane", "cube", "torus", "sphere", "cylinder"};
         for (std::size_t index = 0; index < primitiveIds.size(); ++index) {
             if (index > 0) {
@@ -428,7 +427,6 @@ void Application::drawRenderViewWindow() {
             ImGui::Dummy(ImVec2(static_cast<float>(previewWidth), static_cast<float>(previewHeight)));
         }
         ImGui::TextUnformatted("Left drag: orbit | Right drag: pan");
-        ImGui::TextWrapped("Render status: %s", renderViewPanel_.errorMessage().empty() ? "ok" : renderViewPanel_.errorMessage().c_str());
     }
     ImGui::End();
 }
@@ -601,14 +599,22 @@ void Application::drawShaderHelpWindow() {
         return;
     }
     if (ImGui::Begin("Shader Help", &showShaderHelp_)) {
-        ImGui::TextUnformatted("Phoenix GLSL globals supplied by ShaderEditor");
-        ImGui::Separator();
-        ImGui::BulletText("MVP (mat4): model-view-projection matrix supplied by Phoenix GLSL shader editor.");
-        ImGui::BulletText("uCameraPos (vec3): camera position supplied automatically by the engine.");
-        ImGui::BulletText("aPos (location 0): vertex position supplied by the preview mesh.");
-        ImGui::BulletText("aUv (location 1): UV texture coordinate supplied by the preview mesh.");
-        ImGui::BulletText("sampler2D uniforms: choose an image from the Uniforms panel.");
-        ImGui::TextWrapped("Declare the inputs in the vertex shader and pass values to the fragment shader using out/in variables.");
+        const std::string helpText =
+            "Phoenix GLSL globals supplied by ShaderEditor\n\n"
+            "MVP (mat4): model-view-projection matrix supplied by Phoenix GLSL shader editor.\n"
+            "uCameraPos (vec3): camera position supplied automatically by the engine.\n"
+            "aPos (location 0): vertex position supplied by the preview mesh.\n"
+            "aUv (location 1): UV texture coordinate supplied by the preview mesh.\n"
+            "sampler2D uniforms: choose an image from the Uniforms panel.\n\n"
+            "Declare the inputs in the vertex shader and pass values to the fragment shader using out/in variables.";
+        std::vector<char> buffer(helpText.begin(), helpText.end());
+        buffer.push_back('\0');
+        ImGui::InputTextMultiline(
+            "##shader-help-text",
+            buffer.data(),
+            buffer.size(),
+            ImVec2(-FLT_MIN, -FLT_MIN),
+            ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_AllowTabInput);
     }
     ImGui::End();
 }

@@ -17,6 +17,8 @@ void DiagnosticsState::addError(std::string message) {
     messages_.push_back(formatted);
 }
 
+void DiagnosticsState::clearShaderErrors() { shaderErrors_.clear(); }
+
 void DiagnosticsState::clear() {
     messages_.clear();
     shaderErrors_.clear();

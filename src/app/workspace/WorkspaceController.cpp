@@ -46,14 +46,13 @@ bool WorkspaceController::saveShaders() {
 void WorkspaceController::discardUnsavedChanges() { editorState_.document().isDirty = false; }
 
 bool WorkspaceController::updateShaders() {
+    diagnostics_.clearShaderErrors();
     // Compile first so a failed attempt cannot replace the last valid uniform state.
     const auto previousInteraction = renderSession_.interactionState;
     const auto previousPrimitive = renderSession_.selectedPrimitiveId;
     const auto nextSession = previewRenderer_.updatePreview(editorState_.document(), previousPrimitive, uniformState_.definitions());
     if (nextSession.frameStatus == FrameStatus::Error) {
         renderSession_.errorMessage = nextSession.errorMessage;
-        renderSession_.programStatus = nextSession.programStatus;
-        renderSession_.frameStatus = nextSession.frameStatus;
         diagnostics_.addError(renderSession_.errorMessage);
         return false;
     }

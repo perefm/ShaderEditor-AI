@@ -9,6 +9,7 @@ class DiagnosticsState {
   public:
     void addInfo(std::string message);
     void addError(std::string message);
+    void clearShaderErrors();
     void clear();
     [[nodiscard]] const std::vector<std::string>& messages() const { return messages_; }
     [[nodiscard]] const std::vector<std::string>& shaderErrors() const { return shaderErrors_; }
