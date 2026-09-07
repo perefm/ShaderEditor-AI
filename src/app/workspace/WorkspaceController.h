@@ -18,6 +18,7 @@ class WorkspaceController {
     explicit WorkspaceController(DiagnosticsState& diagnostics);
 
     // File operations update the active document and rebuild dependent state when possible.
+    bool openShader(const std::filesystem::path& shaderPath);
     bool openShaders(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath);
     bool openVertexShader(const std::filesystem::path& vertexPath);
     bool openFragmentShader(const std::filesystem::path& fragmentPath);
@@ -32,6 +33,7 @@ class WorkspaceController {
     void applyUniform(const std::string& name, UniformValue value);
     void orbitPreview(const glm::vec2& delta);
     void panPreview(const glm::vec2& delta);
+    void zoomPreview(float wheelDelta);
     void resetPreviewInteraction();
 
     [[nodiscard]] ShaderEditorState& editorState() { return editorState_; }

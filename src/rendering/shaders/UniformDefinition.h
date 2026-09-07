@@ -13,7 +13,7 @@
 
 namespace shadereditor {
 // Union of all GLSL uniform shapes that the editor can inspect and modify.
-using UniformValue = std::variant<int, bool, float, glm::vec2, glm::vec3, glm::vec4, glm::mat2, glm::mat3, glm::mat4>;
+using UniformValue = std::variant<int, bool, float, glm::vec2, glm::vec3, glm::vec4, glm::mat2, glm::mat3, glm::mat4, std::string>;
 
 // Metadata discovered from shader text and consumed by both UI controls and GL uploads.
 struct UniformDefinition {
@@ -26,3 +26,4 @@ struct UniformDefinition {
     std::string validationRule;
 };
 }  // namespace shadereditor
+

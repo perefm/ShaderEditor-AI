@@ -10,8 +10,8 @@ bool WindowContext::initialize(int width, int height, const char* title) {
         return false;
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -34,6 +34,13 @@ bool WindowContext::initialize(int width, int height, const char* title) {
         return false;
     }
 
+    if (GLVersion.major < 4 || (GLVersion.major == 4 && GLVersion.minor < 6)) {
+        glfwDestroyWindow(window_);
+        window_ = nullptr;
+        glfwTerminate();
+        return false;
+    }
+
     initialized_ = true;
     return true;
 }
@@ -48,3 +55,4 @@ void WindowContext::shutdown() {
     initialized_ = false;
 }
 }  // namespace shadereditor
+

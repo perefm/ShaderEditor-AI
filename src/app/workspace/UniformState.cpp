@@ -1,8 +1,24 @@
 #include "app/workspace/UniformState.h"
 
 namespace shadereditor {
-// Replace the editable uniform list with the latest discovery result from the active shader pair.
-void UniformState::setDefinitions(const std::vector<UniformDefinition>& definitions) { definitions_ = definitions; }
+// Replace the editable uniform list while preserving compatible values from the prior shader.
+void UniformState::setDefinitions(const std::vector<UniformDefinition>& definitions) {
+    std::unordered_map<std::string, UniformValue> previousValues;
+    std::unordered_map<std::string, std::string> previousKinds;
+    for (const auto& definition : definitions_) {
+        previousValues[definition.name] = definition.currentValue;
+        previousKinds[definition.name] = definition.kind;
+    }
+
+    definitions_ = definitions;
+    for (auto& definition : definitions_) {
+        const auto value = previousValues.find(definition.name);
+        const auto kind = previousKinds.find(definition.name);
+        if (value != previousValues.end() && kind != previousKinds.end() && kind->second == definition.kind) {
+            definition.currentValue = value->second;
+        }
+    }
+}
 
 void UniformState::apply(const std::string& name, UniformValue value) {
     // The state is keyed by name because the UI sends updates for individual uniforms.

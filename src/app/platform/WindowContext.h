@@ -8,7 +8,7 @@ namespace shadereditor {
 // Wraps the GLFW window and the OpenGL context required by the app.
 class WindowContext {
   public:
-    bool initialize(int width = 1600, int height = 900, const char* title = "Shader Editor");
+    bool initialize(int width = 1600, int height = 900, const char* title = "Phoenix GLSL shader editor");
     void shutdown();
     [[nodiscard]] bool isInitialized() const { return initialized_; }
     [[nodiscard]] const std::string& backend() const { return backend_; }

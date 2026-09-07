@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.27)
+﻿cmake_minimum_required(VERSION 3.27)
 
 project(ShaderEditor LANGUAGES CXX)
 
@@ -6,13 +6,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+string(TIMESTAMP SHADEREDITOR_VERSION_TIMESTAMP "%Y.%m.%d-%H:%M")
+
 enable_testing()
 
 set(SHADEREDITOR_VCPKG_ROOT "")
 if(DEFINED ENV{VCPKG_ROOT})
     set(SHADEREDITOR_VCPKG_ROOT "$ENV{VCPKG_ROOT}")
-elseif(EXISTS "C:/CODE/Phoenix/vcpkg")
-    set(SHADEREDITOR_VCPKG_ROOT "C:/CODE/Phoenix/vcpkg")
 endif()
 
 set(SHADEREDITOR_VCPKG_INSTALLED_DIR "")
@@ -32,8 +32,10 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_path(STB_IMAGE_INCLUDE_DIR stb_image.h REQUIRED)
 
 add_library(shader_editor_core
+    third_party/imgui_color_text_edit/TextEditor.cpp
     src/app/application/Application.cpp
     src/app/platform/WindowContext.cpp
     src/app/workspace/DiagnosticsState.cpp
@@ -49,6 +51,7 @@ add_library(shader_editor_core
     src/rendering/shaders/ShaderProgramService.cpp
     src/rendering/shaders/UniformIntrospectionService.cpp
     src/services/files/ShaderFileService.cpp
+    src/services/shaders/PhoenixShaderParser.cpp
     src/services/persistence/LayoutPersistenceService.cpp
     src/ui/dockspace/DockspaceHost.cpp
     src/ui/panels/DiagnosticsPanel.cpp
@@ -59,8 +62,11 @@ add_library(shader_editor_core
     src/ui/widgets/DocumentDialogs.cpp
 )
 
-target_include_directories(shader_editor_core PUBLIC src third_party)
+target_include_directories(shader_editor_core PUBLIC src third_party ${STB_IMAGE_INCLUDE_DIR})
 target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32)
+target_compile_definitions(shader_editor_core PRIVATE
+    SHADEREDITOR_VERSION_TIMESTAMP="${SHADEREDITOR_VERSION_TIMESTAMP}"
+)
 if(WIN32)
     target_link_libraries(shader_editor_core PUBLIC comdlg32)
 endif()

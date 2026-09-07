@@ -1,16 +1,46 @@
-#include "rendering/opengl/PreviewRenderer.h"
+﻿#include "rendering/opengl/PreviewRenderer.h"
 
 #include <GLFW/glfw3.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include <glm/gtc/type_ptr.hpp>
 
+#include <regex>
 #include <utility>
 
 namespace shadereditor {
 namespace {
-GLuint compileShader(GLenum type, const char* source, std::string& errorMessage) {
+std::string formatShaderError(
+    const std::string& log,
+    const char* stageName,
+    const std::vector<ShaderStageLine>&) {
+    std::smatch match;
+    const std::regex linePattern(R"((?:ERROR:\s*\d+:|0\(|\(|:)\s*(\d+))");
+    if (!std::regex_search(log, match, linePattern)) {
+        return std::string(stageName) + " shader: " + log;
+    }
+
+    return std::string(stageName) + " shader, line " + match[1].str() + ": " + log;
+}
+
+GLuint compileShader(
+    GLenum type,
+    const char* source,
+    const char* stageName,
+    const std::vector<ShaderStageLine>& lineMap,
+    std::string& errorMessage) {
     const GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
+    std::string sourceWithDocumentLines = source;
+    const auto firstNewline = sourceWithDocumentLines.find('\n');
+    if (firstNewline != std::string::npos && !lineMap.empty()) {
+        sourceWithDocumentLines.insert(
+            firstNewline + 1,
+            "#line " + std::to_string(lineMap.front().documentLine + 1) + "\n");
+    }
+    const char* sourceText = sourceWithDocumentLines.c_str();
+    glShaderSource(shader, 1, &sourceText, nullptr);
     glCompileShader(shader);
 
     GLint success = GL_FALSE;
@@ -24,7 +54,7 @@ GLuint compileShader(GLenum type, const char* source, std::string& errorMessage)
     std::string log(static_cast<std::size_t>(std::max(logLength, 1)), '\0');
     glGetShaderInfoLog(shader, logLength, nullptr, log.data());
     glDeleteShader(shader);
-    errorMessage = std::move(log);
+    errorMessage = formatShaderError(log, stageName, lineMap);
     return 0;
 }
 }
@@ -123,6 +153,9 @@ void PreviewRenderer::destroyGpuResources() {
         if (mesh.vbo != 0) {
             glDeleteBuffers(1, &mesh.vbo);
         }
+        if (mesh.uvbo != 0) {
+            glDeleteBuffers(1, &mesh.uvbo);
+        }
         if (mesh.vao != 0) {
             glDeleteVertexArrays(1, &mesh.vao);
         }
@@ -137,6 +170,13 @@ void PreviewRenderer::destroyGpuResources() {
         glDeleteRenderbuffers(1, &depthStencilBuffer_);
         depthStencilBuffer_ = 0;
     }
+    for (const auto& [_, texture] : textures_) {
+        if (texture != 0) {
+            glDeleteTextures(1, &texture);
+        }
+    }
+    textures_.clear();
+
     if (colorTexture_ != 0) {
         glDeleteTextures(1, &colorTexture_);
         colorTexture_ = 0;
@@ -154,12 +194,14 @@ bool PreviewRenderer::ensureProgram(const ShaderPairDocument& document, std::str
         return true;
     }
 
-    const GLuint vertexShader = compileShader(GL_VERTEX_SHADER, document.vertexSource.c_str(), errorMessage);
+    const GLuint vertexShader = compileShader(
+        GL_VERTEX_SHADER, document.vertexSource.c_str(), "Vertex", document.vertexLineMap, errorMessage);
     if (vertexShader == 0) {
         return false;
     }
 
-    const GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, document.fragmentSource.c_str(), errorMessage);
+    const GLuint fragmentShader = compileShader(
+        GL_FRAGMENT_SHADER, document.fragmentSource.c_str(), "Fragment", document.fragmentLineMap, errorMessage);
     if (fragmentShader == 0) {
         glDeleteShader(vertexShader);
         return false;
@@ -244,16 +286,29 @@ bool PreviewRenderer::ensureMesh(const PreviewPrimitive& primitive, std::string&
         errorMessage = "Preview primitive has no geometry: " + primitive.id;
         return false;
     }
+    if (primitive.texcoords.size() != primitive.vertices.size()) {
+        errorMessage = "Preview primitive has invalid UV coordinates: " + primitive.id;
+        return false;
+    }
 
     MeshBuffers mesh;
     glGenVertexArrays(1, &mesh.vao);
     glGenBuffers(1, &mesh.vbo);
+    glGenBuffers(1, &mesh.uvbo);
 
     glBindVertexArray(mesh.vao);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(primitive.vertices.size() * sizeof(glm::vec3)), primitive.vertices.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
     glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.uvbo);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        static_cast<GLsizeiptr>(primitive.texcoords.size() * sizeof(glm::vec2)),
+        primitive.texcoords.data(),
+        GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+    glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
     mesh.vertexCount = static_cast<GLsizei>(primitive.vertices.size());
@@ -261,24 +316,63 @@ bool PreviewRenderer::ensureMesh(const PreviewPrimitive& primitive, std::string&
     return true;
 }
 
-void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms) const {
+void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms) {
     glUseProgram(program);
 
-    const GLint mvpLocation = glGetUniformLocation(program, "u_mvp");
+    const GLint mvpLocation = glGetUniformLocation(program, "MVP");
     if (mvpLocation >= 0) {
         // The preview camera owns all scene navigation so shaders can rely on a consistent MVP uniform.
         const float aspect = framebufferHeight_ > 0 ? static_cast<float>(framebufferWidth_) / static_cast<float>(framebufferHeight_) : 1.0F;
         const glm::mat4 mvp = previewCamera_.viewProjection(session.interactionState, aspect);
         glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
     }
+    const GLint cameraLocation = glGetUniformLocation(program, "uCameraPos");
+    if (cameraLocation >= 0) {
+        const glm::vec3 cameraPosition = previewCamera_.position(session.interactionState);
+        glUniform3fv(cameraLocation, 1, glm::value_ptr(cameraPosition));
+    }
 
+    int textureUnit = 0;
     for (const auto& uniform : uniforms) {
         const GLint location = glGetUniformLocation(program, uniform.name.c_str());
-        if (location < 0 || uniform.name == "u_mvp") {
+        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos") {
             continue;
         }
 
         // Upload the exact runtime shape discovered by the uniform metadata layer.
+        if (const auto* value = std::get_if<std::string>(&uniform.currentValue)) {
+            if (value->empty()) {
+                continue;
+            }
+            GLuint texture = 0;
+            const auto cached = textures_.find(*value);
+            if (cached != textures_.end()) {
+                texture = cached->second;
+            } else {
+                int width = 0;
+                int height = 0;
+                int channels = 0;
+                stbi_uc* pixels = stbi_load(value->c_str(), &width, &height, &channels, 4);
+                if (pixels == nullptr) {
+                    continue;
+                }
+                glGenTextures(1, &texture);
+                glBindTexture(GL_TEXTURE_2D, texture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+                stbi_image_free(pixels);
+                textures_.emplace(*value, texture);
+            }
+            glActiveTexture(GL_TEXTURE0 + textureUnit);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glUniform1i(location, textureUnit);
+            ++textureUnit;
+            continue;
+        }
+
         if (const auto* value = std::get_if<bool>(&uniform.currentValue)) {
             glUniform1i(location, *value ? 1 : 0);
             continue;

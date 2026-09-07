@@ -1,10 +1,11 @@
-{
+﻿{
   "name": "shader-editor",
   "version-string": "0.1.0",
   "dependencies": [
     "glad",
     "glfw3",
     "glm",
+    "stb",
     {
       "name": "imgui",
       "features": [
@@ -15,3 +16,4 @@
     }
   ]
 }
+

@@ -31,7 +31,7 @@ UniformDefinition makeUniformDefinition(const std::string& type, const std::stri
     }
     if (type == "float") {
         uniform.componentCount = 1;
-        uniform.defaultValue = UniformValue {0.0F};
+        uniform.defaultValue = UniformValue {0.5F};
         uniform.currentValue = uniform.defaultValue;
         return uniform;
     }
@@ -71,6 +71,12 @@ UniformDefinition makeUniformDefinition(const std::string& type, const std::stri
         uniform.currentValue = uniform.defaultValue;
         return uniform;
     }
+    if (type == "sampler2D") {
+        uniform.componentCount = 1;
+        uniform.defaultValue = UniformValue {std::string {}};
+        uniform.currentValue = uniform.defaultValue;
+        return uniform;
+    }
 
     uniform.editable = false;
     uniform.componentCount = 1;
@@ -90,6 +96,9 @@ void collectUniforms(const std::string& source, std::vector<UniformDefinition>& 
             input >> type >> name;
             if (!name.empty() && name.back() == ';') {
                 name.pop_back();
+            }
+            if (name == "MVP" || name == "uCameraPos") {
+                continue;
             }
             uniforms.push_back(makeUniformDefinition(type, name));
         }

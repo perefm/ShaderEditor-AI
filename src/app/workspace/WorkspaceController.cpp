@@ -1,14 +1,23 @@
-#include "app/workspace/WorkspaceController.h"
+﻿#include "app/workspace/WorkspaceController.h"
 
 namespace shadereditor {
 WorkspaceController::WorkspaceController(DiagnosticsState& diagnostics) : diagnostics_(diagnostics) {}
 
+bool WorkspaceController::openShader(const std::filesystem::path& shaderPath) {
+    try {
+        editorState_.attachDocument(fileService_.load(shaderPath));
+        diagnostics_.addInfo("Loaded Phoenix shader.");
+        return updateShaders();
+    } catch (const std::exception& ex) {
+        diagnostics_.addError(ex.what());
+        return false;
+    }
+}
 bool WorkspaceController::openShaders(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath) {
     try {
         // Loading the shader pair together gives the preview everything it needs in one pass.
         editorState_.attachDocument(fileService_.load(vertexPath, fragmentPath));
         diagnostics_.addInfo("Loaded shader pair.");
-        refreshUniforms();
         return updateShaders();
     } catch (const std::exception& ex) {
         diagnostics_.addError(ex.what());
@@ -16,50 +25,13 @@ bool WorkspaceController::openShaders(const std::filesystem::path& vertexPath, c
     }
 }
 
-bool WorkspaceController::openVertexShader(const std::filesystem::path& vertexPath) {
-    try {
-        auto& document = editorState_.document();
-        document.vertexPath = vertexPath;
-        document.vertexSource = fileService_.loadSource(vertexPath);
-        document.markLoaded();
-        diagnostics_.addInfo("Loaded vertex shader.");
-        refreshUniforms();
-        if (!document.fragmentSource.empty()) {
-            return updateShaders();
-        }
-        // Keep the preview idle until the complementary stage is available.
-        renderSession_.frameStatus = FrameStatus::Idle;
-        renderSession_.previewSummary = "Vertex shader loaded. Load a fragment shader to render.";
-        renderSession_.errorMessage.clear();
-        return true;
-    } catch (const std::exception& ex) {
-        diagnostics_.addError(ex.what());
-        return false;
-    }
+bool WorkspaceController::openVertexShader(const std::filesystem::path& shaderPath) {
+    return openShader(shaderPath);
 }
 
-bool WorkspaceController::openFragmentShader(const std::filesystem::path& fragmentPath) {
-    try {
-        auto& document = editorState_.document();
-        document.fragmentPath = fragmentPath;
-        document.fragmentSource = fileService_.loadSource(fragmentPath);
-        document.markLoaded();
-        diagnostics_.addInfo("Loaded fragment shader.");
-        refreshUniforms();
-        if (!document.vertexSource.empty()) {
-            return updateShaders();
-        }
-        // Keep the preview idle until the complementary stage is available.
-        renderSession_.frameStatus = FrameStatus::Idle;
-        renderSession_.previewSummary = "Fragment shader loaded. Load a vertex shader to render.";
-        renderSession_.errorMessage.clear();
-        return true;
-    } catch (const std::exception& ex) {
-        diagnostics_.addError(ex.what());
-        return false;
-    }
+bool WorkspaceController::openFragmentShader(const std::filesystem::path& shaderPath) {
+    return openShader(shaderPath);
 }
-
 bool WorkspaceController::saveShaders() {
     try {
         fileService_.save(editorState_.document());
@@ -74,12 +46,21 @@ bool WorkspaceController::saveShaders() {
 void WorkspaceController::discardUnsavedChanges() { editorState_.document().isDirty = false; }
 
 bool WorkspaceController::updateShaders() {
-    // Rebuild the logical preview state first; actual framebuffer rendering happens lazily in the render panel.
-    renderSession_ = previewRenderer_.updatePreview(editorState_.document(), renderSession_.selectedPrimitiveId, uniformState_.definitions());
-    if (renderSession_.frameStatus == FrameStatus::Error) {
+    // Compile first so a failed attempt cannot replace the last valid uniform state.
+    const auto previousInteraction = renderSession_.interactionState;
+    const auto previousPrimitive = renderSession_.selectedPrimitiveId;
+    const auto nextSession = previewRenderer_.updatePreview(editorState_.document(), previousPrimitive, uniformState_.definitions());
+    if (nextSession.frameStatus == FrameStatus::Error) {
+        renderSession_.errorMessage = nextSession.errorMessage;
+        renderSession_.programStatus = nextSession.programStatus;
+        renderSession_.frameStatus = nextSession.frameStatus;
         diagnostics_.addError(renderSession_.errorMessage);
         return false;
     }
+
+    renderSession_ = nextSession;
+    renderSession_.interactionState = previousInteraction;
+    refreshUniforms();
     diagnostics_.addInfo("Updated shader preview.");
     return true;
 }
@@ -107,6 +88,8 @@ void WorkspaceController::applyUniform(const std::string& name, UniformValue val
 void WorkspaceController::orbitPreview(const glm::vec2& delta) { renderSession_.interactionState.orbit(delta); }
 
 void WorkspaceController::panPreview(const glm::vec2& delta) { renderSession_.interactionState.pan(delta); }
+
+void WorkspaceController::zoomPreview(float wheelDelta) { renderSession_.interactionState.zoom(wheelDelta); }
 
 void WorkspaceController::resetPreviewInteraction() { renderSession_.interactionState.reset(); }
 

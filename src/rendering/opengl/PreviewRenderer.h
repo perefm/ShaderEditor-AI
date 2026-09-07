@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "editor/ShaderPairDocument.h"
 #include "rendering/geometry/PrimitiveLibrary.h"
@@ -36,6 +36,7 @@ class PreviewRenderer {
         // GPU handles for one cached primitive mesh.
         GLuint vao {0};
         GLuint vbo {0};
+        GLuint uvbo {0};
         GLsizei vertexCount {0};
     };
 
@@ -44,7 +45,7 @@ class PreviewRenderer {
     bool ensureProgram(const ShaderPairDocument& document, std::string& errorMessage);
     bool ensureFramebuffer(int width, int height, std::string& errorMessage);
     bool ensureMesh(const PreviewPrimitive& primitive, std::string& errorMessage);
-    void applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms) const;
+    void applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms);
     void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height);
 
     PreviewCamera previewCamera_;
@@ -59,5 +60,6 @@ class PreviewRenderer {
     std::string compiledVertexSource_;
     std::string compiledFragmentSource_;
     std::unordered_map<std::string, MeshBuffers> meshes_;
+    std::unordered_map<std::string, GLuint> textures_;
 };
 }  // namespace shadereditor

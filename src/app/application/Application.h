@@ -12,6 +12,7 @@
 #include "ui/panels/ShaderErrorsPanel.h"
 #include "ui/panels/UniformsPanel.h"
 #include "ui/widgets/DocumentDialogs.h"
+#include "imgui_color_text_edit/TextEditor.h"
 
 #include <filesystem>
 
@@ -29,8 +30,8 @@ class Application {
   private:
     // Example shaders live under the runtime assets folder next to the executable.
     bool loadExampleShaders();
-    bool openVertexShaderFromDialog();
-    bool openFragmentShaderFromDialog();
+    bool openShaderFromDialog();
+    bool openImageForUniform(const std::string& uniformName);
     // Dockable panel visibility is persisted between launches.
     void restorePanelVisibility();
     void storePanelVisibility();
@@ -42,6 +43,7 @@ class Application {
     void drawUniformsWindow();
     void drawDiagnosticsWindow();
     void drawShaderErrorsWindow();
+    void drawShaderHelpWindow();
     void registerPanels();
     void drawUi();
 
@@ -61,12 +63,15 @@ class Application {
     ShaderErrorsPanel shaderErrorsPanel_;
     DocumentDialogs documentDialogs_;
     // Runtime paths for the bundled example shaders.
-    std::filesystem::path exampleVertexPath_;
-    std::filesystem::path exampleFragmentPath_;
+    std::filesystem::path exampleShaderPath_;
+    std::filesystem::path pixelLightingShaderPath_;
     bool showShaderEditor_ {true};
     bool showRenderView_ {true};
     bool showUniforms_ {true};
     bool showDiagnostics_ {true};
     bool showShaderErrors_ {true};
+    bool showShaderHelp_ {false};
+    TextEditor shaderEditor_;
+    std::string shaderEditorText_;
 };
 }  // namespace shadereditor

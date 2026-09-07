@@ -1,12 +1,27 @@
 #include "rendering/geometry/BuiltInPrimitives.h"
 
 #include <glm/vec3.hpp>
+#include <glm/vec2.hpp>
 
 #include <cmath>
+#include <algorithm>
 
 namespace shadereditor {
 namespace {
 constexpr float kPi = 3.14159265359F;
+
+void generateUvMap(PreviewPrimitive& primitive) {
+    primitive.texcoords.reserve(primitive.vertices.size());
+    for (const auto& position : primitive.vertices) {
+        const float u = primitive.id == "plane"
+            ? (position.x + 1.0F) * 0.5F
+            : 0.5F + std::atan2(position.z, position.x) / (2.0F * kPi);
+        const float v = primitive.id == "plane"
+            ? (position.y + 1.0F) * 0.5F
+            : 0.5F + std::asin(std::clamp(position.y, -1.0F, 1.0F)) / kPi;
+        primitive.texcoords.emplace_back(u, v);
+    }
+}
 
 void appendTriangle(std::vector<glm::vec3>& vertices, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
     vertices.insert(vertices.end(), {a, b, c});
@@ -95,12 +110,16 @@ PreviewPrimitive makeTorus() {
 }
 
 std::vector<PreviewPrimitive> makeBuiltInPrimitives() {
-    return {
+    auto primitives = std::vector<PreviewPrimitive> {
         makePlane(),
         makeCube(),
         makeTorus(),
         makeSphere(),
         makeCylinder(),
     };
+    for (auto& primitive : primitives) {
+        generateUvMap(primitive);
+    }
+    return primitives;
 }
 }  // namespace shadereditor

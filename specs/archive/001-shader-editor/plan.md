@@ -1,7 +1,7 @@
 # Implementation Plan: Multiplatform Shader Editor
 
 **Branch**: `001-shader-editor` | **Date**: 2026-04-11 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-shader-editor/spec.md`
+**Input**: Feature specification from `/specs/archive/001-shader-editor/spec.md`
 
 ## Summary
 
@@ -44,7 +44,7 @@ debug workflow that remains portable across supported desktop platforms.
 ### Documentation (this feature)
 
 ```text
-specs/001-shader-editor/
+specs/archive/001-shader-editor/
 |-- plan.md
 |-- research.md
 |-- data-model.md
