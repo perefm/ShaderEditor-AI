@@ -353,19 +353,19 @@ void Application::drawMainMenu() {
 
     // Menu actions mirror the inline buttons from the editor panel.
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Open Shader...")) {
-            openShaderFromDialog();
-        }
-        if (ImGui::MenuItem("Open Model...")) {
+        if (ImGui::MenuItem("Open model...")) {
             openModelFromDialog();
+        }
+        if (ImGui::MenuItem("Open shader...")) {
+            openShaderFromDialog();
         }
         if (ImGui::MenuItem("Save shader", "Ctrl+S")) {
             workspace_.saveShaders();
         }
-        if (ImGui::MenuItem("Save As...")) {
+        if (ImGui::MenuItem("Save shader As...")) {
             saveShaderAsFromDialog();
         }
-        if (ImGui::MenuItem("Update Shader", "Ctrl+Enter")) {
+        if (ImGui::MenuItem("Update shader", "Ctrl+Enter")) {
             shaderEditorPanel_.pressUpdateButton();
         }
         if (ImGui::MenuItem("Exit")) {
@@ -495,7 +495,7 @@ void Application::drawRenderViewWindow() {
         // Lets the user import a model directly from this panel, without going through the File
         // menu; reuses the exact same file dialog/import path as File > Open Model...
         ImGui::SameLine();
-        if (ImGui::Button("Open Model...")) {
+        if (ImGui::Button("Open model...")) {
             openModelFromDialog();
         }
 

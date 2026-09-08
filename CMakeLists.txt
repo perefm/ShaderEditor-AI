@@ -1,9 +1,10 @@
 ﻿cmake_minimum_required(VERSION 3.27)
 
-# Default to a fully static triplet so the produced executable does not depend on any vcpkg
-# shared libraries (glfw3.dll, assimp-*.dll, etc.) at runtime - only OS/CRT DLLs remain dynamic.
-# This must be set before project() so the vcpkg toolchain picks it up. Users can still override
-# it with -DVCPKG_TARGET_TRIPLET=... on the command line if a shared build is ever needed again.
+# Default to a static vcpkg triplet so the produced executable does not depend on vcpkg
+# shared libraries (glfw3.dll, assimp-*.dll, etc.) at runtime. The OS and MSVC runtime
+# remain dynamic with the static-md triplet.
+# This must be set before project() so the vcpkg toolchain picks it up. Users can still
+# override it with -DVCPKG_TARGET_TRIPLET=... if a shared build is explicitly required.
 if(NOT DEFINED VCPKG_TARGET_TRIPLET)
     set(VCPKG_TARGET_TRIPLET "x64-windows-static-md" CACHE STRING "Vcpkg target triplet")
 endif()
@@ -13,6 +14,7 @@ project(ShaderEditor LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build project libraries as static libraries")
 
 # Match vcpkg's "static-md" triplet: statically link every dependency library, but keep using the
 # dynamic (DLL) MSVC C++ runtime so the executable still only needs the standard VC++
@@ -49,7 +51,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_path(STB_IMAGE_INCLUDE_DIR stb_image.h REQUIRED)
 
-add_library(shader_editor_core
+add_library(shader_editor_core STATIC
     third_party/imgui_color_text_edit/TextEditor.cpp
     src/app/application/Application.cpp
     src/app/platform/WindowContext.cpp

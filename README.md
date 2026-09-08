@@ -108,6 +108,23 @@ $env:VCPKG_ROOT = "C:\tools\vcpkg"
 The CMake preset uses this variable to locate the vcpkg toolchain. Dependencies
 declared in `vcpkg.json` are installed automatically during configuration.
 
+### Static library linking
+
+The project links the vcpkg dependencies statically. The `default` CMake preset
+uses the `x64-windows-static-md` triplet and sets `BUILD_SHARED_LIBS=OFF`, so the
+executable does not require vcpkg DLLs such as `glfw3.dll` or `assimp-*.dll` at
+runtime. The `-md` suffix intentionally keeps the MSVC runtime dynamic; Windows
+system DLLs and the Visual C++ Redistributable are still runtime requirements.
+
+If the build directory was previously configured with the dynamic
+`x64-windows` triplet, remove it before configuring again so CMake and vcpkg do
+not reuse the old library selection:
+
+```powershell
+Remove-Item -Recurse -Force build-vcpkg
+cmake --preset default
+```
+
 ## Build
 
 ### Configure
