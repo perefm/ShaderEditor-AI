@@ -22,14 +22,23 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cfloat>
+#include <fstream>
+#include <cmath>
 #include <filesystem>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace shadereditor {
 namespace {
+constexpr float kDefaultEditorTextScale = 1.0F;
+constexpr float kMinEditorTextScale = 0.75F;
+constexpr float kMaxEditorTextScale = 2.0F;
+
 std::string formatShaderSource(const std::string& source) {
     std::istringstream input(source);
     std::ostringstream output;
@@ -102,6 +111,27 @@ std::filesystem::path executableDirectory() {
     return std::filesystem::current_path();
 }
 
+std::optional<float> parseFloatSetting(std::string_view text) {
+    float value = 0.0F;
+    const char* begin = text.data();
+    const char* end = begin + text.size();
+    const auto [ptr, error] = std::from_chars(begin, end, value);
+    if (error != std::errc {} || ptr != end || !std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::optional<bool> parseBoolSetting(std::string_view text) {
+    if (text == "1" || text == "true") {
+        return true;
+    }
+    if (text == "0" || text == "false") {
+        return false;
+    }
+    return std::nullopt;
+}
+
 #ifdef _WIN32
 std::optional<std::filesystem::path> openFileDialog(
     const wchar_t* title,
@@ -170,6 +200,10 @@ bool Application::initialize() {
     if (!windowContext_.initialize(1600, 900, windowTitle.c_str())) {
         return false;
     }
+    settingsPath_ = executableDirectory() / "shader_editor_settings.ini";
+    loadApplicationSettings();
+    workspace_.setRenderBackgroundColor(renderBackgroundColor_);
+    applyVsyncSetting();
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -222,6 +256,7 @@ int Application::run() {
 }
 
 void Application::shutdown() {
+    saveApplicationSettings();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -235,6 +270,7 @@ void Application::registerPanels() {
     dockspaceHost_.registerPanel("uniforms");
     dockspaceHost_.registerPanel("diagnostics");
     dockspaceHost_.registerPanel("shader-errors");
+    dockspaceHost_.registerPanel("configuration");
 }
 
 void Application::drawUi() {
@@ -250,6 +286,96 @@ void Application::drawUi() {
     drawDiagnosticsWindow();
     drawShaderErrorsWindow();
     drawShaderHelpWindow();
+    drawConfigurationWindow();
+}
+
+void Application::loadApplicationSettings() {
+    if (settingsPath_.empty() || !std::filesystem::exists(settingsPath_)) {
+        diagnostics_.addInfo("Using default application settings.");
+        return;
+    }
+
+    std::ifstream input(settingsPath_);
+    if (!input) {
+        diagnostics_.addError("Could not open settings file: " + settingsPath_.string());
+        return;
+    }
+
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty() || line.front() == '#') {
+            continue;
+        }
+        const auto separator = line.find('=');
+        if (separator == std::string::npos) {
+            diagnostics_.addError("Invalid settings entry: " + line);
+            continue;
+        }
+        const std::string key = line.substr(0, separator);
+        const std::string value = line.substr(separator + 1);
+        if (key == "editorTextScale") {
+            const auto parsed = parseFloatSetting(value);
+            if (parsed) {
+                editorTextScale_ = std::clamp(*parsed, kMinEditorTextScale, kMaxEditorTextScale);
+            } else {
+                diagnostics_.addError("Invalid editorTextScale setting: " + value);
+            }
+        } else if (key == "vsyncEnabled") {
+            const auto parsed = parseBoolSetting(value);
+            if (parsed) {
+                vsyncEnabled_ = *parsed;
+            } else {
+                diagnostics_.addError("Invalid vsyncEnabled setting: " + value);
+            }
+        } else if (key == "renderBackgroundColor") {
+            std::istringstream stream(value);
+            glm::vec4 color = renderBackgroundColor_;
+            char comma1 = '\0';
+            char comma2 = '\0';
+            char comma3 = '\0';
+            if (stream >> color.r >> comma1 >> color.g >> comma2 >> color.b >> comma3 >> color.a &&
+                comma1 == ',' && comma2 == ',' && comma3 == ',' &&
+                std::isfinite(color.r) && std::isfinite(color.g) && std::isfinite(color.b) && std::isfinite(color.a)) {
+                renderBackgroundColor_ = glm::vec4(
+                    std::clamp(color.r, 0.0F, 1.0F),
+                    std::clamp(color.g, 0.0F, 1.0F),
+                    std::clamp(color.b, 0.0F, 1.0F),
+                    std::clamp(color.a, 0.0F, 1.0F));
+            } else {
+                diagnostics_.addError("Invalid renderBackgroundColor setting: " + value);
+            }
+        } else {
+            diagnostics_.addInfo("Ignoring unknown settings entry: " + key);
+        }
+    }
+}
+
+void Application::saveApplicationSettings() {
+    if (settingsPath_.empty()) {
+        return;
+    }
+    std::ofstream output(settingsPath_);
+    if (!output) {
+        diagnostics_.addError("Could not write settings file: " + settingsPath_.string());
+        return;
+    }
+    output << "editorTextScale=" << editorTextScale_ << '\n';
+    output << "vsyncEnabled=" << (vsyncEnabled_ ? "true" : "false") << '\n';
+    output << "renderBackgroundColor="
+           << renderBackgroundColor_.r << ','
+           << renderBackgroundColor_.g << ','
+           << renderBackgroundColor_.b << ','
+           << renderBackgroundColor_.a << '\n';
+}
+
+void Application::applyEditorTextScale() {
+    editorTextScale_ = std::clamp(editorTextScale_, kMinEditorTextScale, kMaxEditorTextScale);
+}
+
+void Application::applyVsyncSetting() {
+    if (!windowContext_.setVsyncEnabled(vsyncEnabled_)) {
+        diagnostics_.addError("Could not apply vsync setting to the active window.");
+    }
 }
 
 bool Application::loadExampleShaders() {
@@ -381,6 +507,7 @@ void Application::drawMainMenu() {
         ImGui::MenuItem("Diagnostics", nullptr, &showDiagnostics_);
         ImGui::MenuItem("Shader Errors", nullptr, &showShaderErrors_);
         ImGui::MenuItem("Shader Help", nullptr, &showShaderHelp_);
+        ImGui::MenuItem("Config", nullptr, &showConfiguration_);
         ImGui::EndMenu();
     }
 
@@ -459,6 +586,7 @@ void Application::drawShaderEditorWindow() {
         }
         ImVec2 editorSize = ImGui::GetContentRegionAvail();
         editorSize.y = std::max(1.0F, editorSize.y);
+        shaderEditor_.SetFontScale(editorTextScale_);
         shaderEditor_.Render("##phoenix-source", editorSize, true);
         const std::string editedSource = shaderEditor_.GetText();
         if (editedSource != source) {
@@ -563,6 +691,14 @@ void Application::drawRenderViewWindow() {
             workspace_.setBpm(bpm);
         }
         ImGui::Separator();
+        ImGui::Text("FPS: %.1f", workspace_.renderSession().displayFps);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(220.0F);
+        if (ImGui::ColorEdit4("Background", &renderBackgroundColor_.x)) {
+            workspace_.setRenderBackgroundColor(renderBackgroundColor_);
+        }
+        ImGui::Separator();
+
         const ImVec2 available = ImGui::GetContentRegionAvail();
         const int previewWidth = std::max(1, static_cast<int>(available.x));
         const int previewHeight = std::max(180, static_cast<int>(available.y - ImGui::GetTextLineHeightWithSpacing() * 2.0F));
@@ -733,6 +869,33 @@ void Application::drawDiagnosticsWindow() {
     ImGui::End();
 }
 
+void Application::drawConfigurationWindow() {
+    if (!showConfiguration_) {
+        return;
+    }
+
+    if (ImGui::Begin("Config", &showConfiguration_)) {
+        ImGui::TextUnformatted("Editor");
+        ImGui::SetNextItemWidth(160.0F);
+        if (ImGui::SliderFloat("Text size", &editorTextScale_, kMinEditorTextScale, kMaxEditorTextScale, "%.2fx")) {
+            applyEditorTextScale();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##editor-text-size")) {
+            editorTextScale_ = kDefaultEditorTextScale;
+            applyEditorTextScale();
+        }
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Render");
+        if (ImGui::Checkbox("VSync", &vsyncEnabled_)) {
+            applyVsyncSetting();
+        }
+        ImGui::TextDisabled("Preferences are saved to %s", settingsPath_.string().c_str());
+    }
+    ImGui::End();
+}
+
 void Application::drawShaderErrorsWindow() {
     if (!showShaderErrors_) {
         return;
@@ -776,7 +939,10 @@ void Application::drawShaderHelpWindow() {
             "  t (float): elapsed seconds since playback was last reset; drives time-based effects.\n"
             "  tend (float): configured section duration in seconds (Render panel 'tend' field).\n"
             "  beat (float): normalized phase of the current beat, always in [0, 1); it resets to\n"
-            "    0 on each beat boundary and advances according to the configured BPM.\n\n"
+            "    0 on each beat boundary and advances according to the configured BPM.\n"
+            "  vpWidth (float): current Render preview viewport width in pixels.\n"
+            "  vpHeight (float): current Render preview viewport height in pixels.\n"
+            "  aspectRatio (float): current Render preview viewport width / height.\n\n"
             "Imported model material (per active mesh, from the model's own Assimp materials):\n"
             "  Mat_Ka (vec3): ambient color.\n"
             "  Mat_Kd (vec3): diffuse color.\n"

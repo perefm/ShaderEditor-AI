@@ -38,7 +38,7 @@ bool WindowContext::initialize(int width, int height, const char* title) {
 
     glfwMakeContextCurrent(window_);
     // Keep preview interaction responsive while avoiding busy-loop rendering.
-    glfwSwapInterval(1);
+    glfwSwapInterval(vsyncEnabled_ ? 1 : 0);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
         glfwDestroyWindow(window_);
@@ -66,5 +66,15 @@ void WindowContext::shutdown() {
     }
     glfwTerminate();
     initialized_ = false;
+}
+
+bool WindowContext::setVsyncEnabled(bool enabled) {
+    if (!initialized_ || window_ == nullptr) {
+        return false;
+    }
+    glfwMakeContextCurrent(window_);
+    glfwSwapInterval(enabled ? 1 : 0);
+    vsyncEnabled_ = enabled;
+    return true;
 }
 }  // namespace shadereditor

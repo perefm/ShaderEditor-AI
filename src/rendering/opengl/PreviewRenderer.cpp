@@ -135,7 +135,7 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
             return session;
         }
 
-        beginModelFrame(program_, width, height);
+        beginModelFrame(program_, width, height, session.backgroundColor);
         applyUniforms(program_, session, uniforms);
         // The animator recomputes bone transforms fresh every frame from the current playback
         // time, so animation always reflects Play/Pause/Reset state exactly (no stale caching).
@@ -172,7 +172,7 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
         return session;
     }
 
-    renderPrimitive(*primitive, program_, width, height);
+    renderPrimitive(*primitive, program_, width, height, session.backgroundColor);
     applyUniforms(program_, session, uniforms);
     glDrawArrays(GL_TRIANGLES, 0, meshes_.at(primitive->id).vertexCount);
 
@@ -570,6 +570,12 @@ void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session
                 glUniform1f(location, session.playback.sectionDurationSeconds());
             } else if (uniform.name == "beat") {
                 glUniform1f(location, session.playback.beat());
+            } else if (uniform.name == "vpWidth") {
+                glUniform1f(location, static_cast<float>(session.viewport.widthPixels));
+            } else if (uniform.name == "vpHeight") {
+                glUniform1f(location, static_cast<float>(session.viewport.heightPixels));
+            } else if (uniform.name == "aspectRatio") {
+                glUniform1f(location, session.viewport.aspectRatio);
             }
             // Mat_Ka/Mat_Kd/Mat_Ks/Mat_KsStrenght/gBones are uploaded separately, per active mesh,
             // by the model-rendering path (see renderModel/applyMaterialUniforms) since their
@@ -649,22 +655,22 @@ void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session
     }
 }
 
-void PreviewRenderer::renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height) {
+void PreviewRenderer::renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height, const glm::vec4& clearColor) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
     glViewport(0, 0, width, height);
     glEnable(GL_DEPTH_TEST);
     // Clear the offscreen target every frame so the ImGui panel always shows a complete preview image.
-    glClearColor(0.09F, 0.10F, 0.13F, 1.0F);
+    glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(program);
     glBindVertexArray(meshes_.at(primitive.id).vao);
 }
 
-void PreviewRenderer::beginModelFrame(GLuint program, int width, int height) {
+void PreviewRenderer::beginModelFrame(GLuint program, int width, int height, const glm::vec4& clearColor) {
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
     glViewport(0, 0, width, height);
     glEnable(GL_DEPTH_TEST);
-    glClearColor(0.09F, 0.10F, 0.13F, 1.0F);
+    glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(program);
 }

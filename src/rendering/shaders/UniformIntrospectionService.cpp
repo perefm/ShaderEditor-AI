@@ -20,6 +20,9 @@ bool isPhoenixAutoUniform(const std::string& name, const std::string& type) {
     if ((name == "t" || name == "tend" || name == "beat") && type == "float") {
         return true;
     }
+    if ((name == "vpWidth" || name == "vpHeight" || name == "aspectRatio") && type == "float") {
+        return true;
+    }
     if ((name == "Mat_Ka" || name == "Mat_Kd" || name == "Mat_Ks") && type == "vec3") {
         return true;
     }

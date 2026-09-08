@@ -12,6 +12,8 @@
 #include "ui/widgets/DocumentDialogs.h"
 #include "imgui_color_text_edit/TextEditor.h"
 
+#include <glm/vec4.hpp>
+
 #include <filesystem>
 
 namespace shadereditor {
@@ -43,8 +45,13 @@ class Application {
     void drawDiagnosticsWindow();
     void drawShaderErrorsWindow();
     void drawShaderHelpWindow();
+    void drawConfigurationWindow();
     void registerPanels();
     void drawUi();
+    void loadApplicationSettings();
+    void saveApplicationSettings();
+    void applyEditorTextScale();
+    void applyVsyncSetting();
 
     // Native window + OpenGL context bootstrap.
     WindowContext windowContext_;
@@ -68,9 +75,14 @@ class Application {
     bool showDiagnostics_ {false};
     bool showShaderErrors_ {true};
     bool showShaderHelp_ {false};
+    bool showConfiguration_ {false};
     TextEditor shaderEditor_;
     std::string shaderEditorText_;
+    float editorTextScale_ {1.0F};
+    bool vsyncEnabled_ {true};
+    glm::vec4 renderBackgroundColor_ {0.09F, 0.10F, 0.13F, 1.0F};
     // Dear ImGui persists its dock layout beside the executable, never in the runtime assets tree.
     std::string imguiIniPath_;
+    std::filesystem::path settingsPath_;
 };
 }  // namespace shadereditor

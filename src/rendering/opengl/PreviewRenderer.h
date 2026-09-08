@@ -79,8 +79,8 @@ class PreviewRenderer {
     void applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms);
     // Binds one imported mesh's textures/material colors/bone matrices and issues its draw call.
     void renderModelMesh(const ModelMesh& mesh, const ModelMeshBuffers& buffers, GLuint program, const std::vector<glm::mat4>& boneTransforms);
-    void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height);
-    void beginModelFrame(GLuint program, int width, int height);
+    void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height, const glm::vec4& clearColor);
+    void beginModelFrame(GLuint program, int width, int height, const glm::vec4& clearColor);
     GLuint textureForPath(const std::filesystem::path& path);
     // Decodes and uploads a texture embedded directly in the model file (glTF/.glb), caching it
     // by a hash of its encoded bytes since it has no file path to key on.

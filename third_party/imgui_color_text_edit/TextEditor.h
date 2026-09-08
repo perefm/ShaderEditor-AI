@@ -229,6 +229,8 @@ public:
 
 	inline void SetShowWhitespaces(bool aValue) { mShowWhitespaces = aValue; }
 	inline bool IsShowingWhitespaces() const { return mShowWhitespaces; }
+	inline void SetFontScale(float aValue) { mFontScale = aValue > 0.0f ? aValue : 1.0f; }
+	inline float GetFontScale() const { return mFontScale; }
 
 	void SetTabSize(int aValue);
 	inline int GetTabSize() const { return mTabSize; }
@@ -371,6 +373,7 @@ private:
 	bool mHandleMouseInputs;
 	bool mIgnoreImGuiChild;
 	bool mShowWhitespaces;
+	float mFontScale;
 
 	Palette mPaletteBase;
 	Palette mPalette;
