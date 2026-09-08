@@ -15,7 +15,9 @@ tool panels in a dockable Dear ImGui layout.
 - Imported model materials and textures, including textures embedded in `.glb` files
 - Skeletal animation playback with an animation selector in the Render panel
 - Model-size-aware orbit, pan, zoom, framing, and clipping
-- Dockable editor, render, uniforms, diagnostics, and shader error panels
+- Dockable editor, render, uniforms, diagnostics, configuration, and shader error panels
+- Configurable shader-editor text size and VSync in the `Config` panel
+- Render-panel FPS readout and configurable preview background color
 - `Ctrl+Enter` and button-driven shader recompilation
 - Editable runtime uniforms including `float`, `int`, `bool`, `vec2`, `vec3`,
   `vec4`, `mat2`, `mat3`, `mat4`, and `sampler2D`
@@ -44,6 +46,10 @@ uniforms in the `Uniforms` panel:
   is always greater than `1.0` and reaching it resets `t` to `0.0`.
 - `uniform float beat`: normalized current beat phase in `[0, 1)`, derived from
   elapsed time and BPM; it resets to `0` at each beat boundary.
+- `uniform float vpWidth`: current Render preview viewport width in pixels.
+- `uniform float vpHeight`: current Render preview viewport height in pixels.
+- `uniform float aspectRatio`: current Render preview viewport width divided by
+  height.
 - `uniform vec3 Mat_Ka`, `Mat_Kd`, `Mat_Ks`: active mesh ambient, diffuse, and
   specular material colors.
 - `uniform float Mat_KsStrenght`: active mesh specular strength.

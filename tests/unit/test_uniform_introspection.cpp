@@ -18,10 +18,11 @@ TEST_CASE("uniform introspection detects vector and matrix uniforms") {
 
 TEST_CASE("uniform introspection recognizes Phoenix auto-uniforms as read-only") {
     shadereditor::ShaderPairDocument document;
-    // "t"/"tend"/"beat" (playback clock), Mat_Ka/Mat_Kd/Mat_Ks/Mat_KsStrenght (per-mesh material)
-    // and gBones[] (skeletal animation) are all supplied by the app/engine, never the user.
+    // Playback, viewport, material, and skeletal-animation values are supplied by the app/engine,
+    // never the user.
     document.fragmentSource =
         "uniform float t; uniform float tend; uniform float beat; "
+        "uniform float vpWidth; uniform float vpHeight; uniform float aspectRatio; "
         "uniform vec3 Mat_Ka; uniform vec3 Mat_Kd; uniform vec3 Mat_Ks; "
         "uniform float Mat_KsStrenght; uniform mat4 gBones[100]; "
         "uniform float u_userValue; void main(){}";
@@ -29,7 +30,7 @@ TEST_CASE("uniform introspection recognizes Phoenix auto-uniforms as read-only")
     shadereditor::UniformIntrospectionService introspection;
     const auto uniforms = introspection.discover(document);
 
-    REQUIRE(uniforms.size() == 9);
+    REQUIRE(uniforms.size() == 12);
     for (const auto& uniform : uniforms) {
         if (uniform.name == "u_userValue") {
             REQUIRE(uniform.provenance == shadereditor::UniformProvenance::User);
@@ -41,6 +42,29 @@ TEST_CASE("uniform introspection recognizes Phoenix auto-uniforms as read-only")
         REQUIRE(uniform.provenance == shadereditor::UniformProvenance::PhoenixAuto);
         REQUIRE(!uniform.editable);
     }
+}
+
+TEST_CASE("viewport Phoenix auto-uniforms require scalar float declarations") {
+    shadereditor::ShaderPairDocument document;
+    document.fragmentSource =
+        "uniform vec2 vpWidth; "
+        "uniform int vpHeight; "
+        "uniform float aspectRatio; "
+        "void main(){}";
+
+    shadereditor::UniformIntrospectionService introspection;
+    const auto uniforms = introspection.discover(document);
+
+    REQUIRE(uniforms.size() == 3);
+    REQUIRE(uniforms[0].name == "vpWidth");
+    REQUIRE(uniforms[0].provenance == shadereditor::UniformProvenance::User);
+    REQUIRE(uniforms[0].editable);
+    REQUIRE(uniforms[1].name == "vpHeight");
+    REQUIRE(uniforms[1].provenance == shadereditor::UniformProvenance::User);
+    REQUIRE(uniforms[1].editable);
+    REQUIRE(uniforms[2].name == "aspectRatio");
+    REQUIRE(uniforms[2].provenance == shadereditor::UniformProvenance::PhoenixAuto);
+    REQUIRE(!uniforms[2].editable);
 }
 
 TEST_CASE("uniform introspection excludes engine-owned MVP/uCameraPos/model uniforms entirely") {

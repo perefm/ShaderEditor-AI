@@ -1,5 +1,6 @@
 ﻿#include "app/workspace/WorkspaceController.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace shadereditor {
@@ -69,6 +70,7 @@ bool WorkspaceController::updateShaders() {
     const auto previousRenderTargetKind = renderSession_.renderTargetKind;
     const auto previousLoadedModelId = renderSession_.loadedModelId;
     const auto previousSelectedAnimationIndex = renderSession_.selectedAnimationIndex;
+    const auto previousBackgroundColor = renderSession_.backgroundColor;
     const auto nextSession = previewRenderer_.updatePreview(editorState_.document(), previousPrimitive, uniformState_.definitions());
     if (nextSession.frameStatus == FrameStatus::Error) {
         renderSession_.errorMessage = nextSession.errorMessage;
@@ -81,6 +83,7 @@ bool WorkspaceController::updateShaders() {
     renderSession_.renderTargetKind = previousRenderTargetKind;
     renderSession_.loadedModelId = previousLoadedModelId;
     renderSession_.selectedAnimationIndex = previousSelectedAnimationIndex;
+    renderSession_.backgroundColor = previousBackgroundColor;
     refreshUniforms();
     diagnostics_.addInfo("Updated shader preview.");
     return true;
@@ -93,9 +96,14 @@ const RenderSession& WorkspaceController::renderPreview(int width, int height) {
     if (lastFrameTime_) {
         const std::chrono::duration<float> delta = now - *lastFrameTime_;
         playbackClock_.advance(delta.count());
+        renderMetrics_.recordFrame(delta.count());
     }
     lastFrameTime_ = now;
 
+    renderSession_.viewport = makeViewportMetrics(width, height);
+    renderSession_.previewWidth = renderSession_.viewport.widthPixels;
+    renderSession_.previewHeight = renderSession_.viewport.heightPixels;
+    renderSession_.displayFps = renderMetrics_.displayFps();
     // Publish the up-to-date clock snapshot before rendering so PreviewRenderer can use it to
     // override t/tend/beat uniform values for this frame.
     renderSession_.playback = playbackClock_;
@@ -114,6 +122,14 @@ void WorkspaceController::resetPreview() { playbackClock_.reset(); }
 void WorkspaceController::setSectionDuration(float seconds) { playbackClock_.setSectionDurationSeconds(seconds); }
 
 void WorkspaceController::setBpm(float bpm) { playbackClock_.setBpm(bpm); }
+
+void WorkspaceController::setRenderBackgroundColor(const glm::vec4& color) {
+    renderSession_.backgroundColor = glm::vec4(
+        std::clamp(color.r, 0.0F, 1.0F),
+        std::clamp(color.g, 0.0F, 1.0F),
+        std::clamp(color.b, 0.0F, 1.0F),
+        std::clamp(color.a, 0.0F, 1.0F));
+}
 
 bool WorkspaceController::handleKeyChord(const std::string& chord) { return chord == "Ctrl+Enter" ? updateShaders() : false; }
 

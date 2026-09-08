@@ -12,6 +12,8 @@
 #include "rendering/shaders/UniformIntrospectionService.h"
 #include "services/files/ShaderFileService.h"
 
+#include <glm/vec4.hpp>
+
 #include <chrono>
 #include <filesystem>
 #include <optional>
@@ -54,6 +56,8 @@ class WorkspaceController {
     void setSectionDuration(float seconds);
     void setBpm(float bpm);
     [[nodiscard]] const PlaybackClockState& playbackClock() const { return playbackClock_; }
+    void setRenderBackgroundColor(const glm::vec4& color);
+    [[nodiscard]] glm::vec4 renderBackgroundColor() const { return renderSession_.backgroundColor; }
 
     // Imports a 3D model via Assimp and makes it the active render target. On failure, records
     // the error via diagnostics_ and leaves any previously loaded model/render target untouched
@@ -92,6 +96,7 @@ class WorkspaceController {
     UniformState uniformState_;
     RenderSession renderSession_;
     PlaybackClockState playbackClock_;
+    RenderMetrics renderMetrics_;
     // Wall-clock timestamp of the previous renderPreview() call, used to compute the frame's
     // delta time for advancing the playback clock. Empty until the first frame is rendered.
     std::optional<std::chrono::steady_clock::time_point> lastFrameTime_;
