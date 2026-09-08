@@ -24,6 +24,12 @@ class RenderViewPanel {
     [[nodiscard]] std::vector<std::string> animationNames() const { return controller_.modelAnimationNames(); }
     void selectAnimation(int animationIndex) { controller_.selectAnimation(animationIndex); }
     [[nodiscard]] int selectedAnimationIndex() const { return controller_.selectedAnimationIndex(); }
+    void setAnimationLooping(bool looping) { controller_.setAnimationLooping(looping); }
+    [[nodiscard]] bool animationLooping() const { return controller_.animationLooping(); }
+    // Camera selection passthroughs: -1 is the free orbit camera, >= 0 a model-authored camera.
+    [[nodiscard]] std::vector<std::string> cameraNames() const { return controller_.modelCameraNames(); }
+    void selectCamera(int cameraIndex) { controller_.selectCamera(cameraIndex); }
+    [[nodiscard]] int selectedCameraIndex() const { return controller_.selectedCameraIndex(); }
 
   private:
     WorkspaceController& controller_;

@@ -64,6 +64,8 @@ add_library(shader_editor_core STATIC
     src/rendering/geometry/PrimitiveLibrary.cpp
     src/rendering/models/AssimpModelLoader.cpp
     src/rendering/models/SkeletalAnimator.cpp
+    src/rendering/models/ModelCameraResolver.cpp
+    src/rendering/models/ModelInfoSummary.cpp
     src/rendering/opengl/PreviewRenderer.cpp
     src/rendering/opengl/PreviewCamera.cpp
     src/rendering/shaders/ShaderProgramService.cpp
@@ -73,6 +75,7 @@ add_library(shader_editor_core STATIC
     src/ui/dockspace/DockspaceHost.cpp
     src/ui/panels/DiagnosticsPanel.cpp
     src/ui/panels/RenderViewPanel.cpp
+    src/ui/panels/ModelInfoPanel.cpp
     src/ui/panels/ShaderEditorPanel.cpp
     src/ui/panels/ShaderErrorsPanel.cpp
     src/ui/panels/UniformsPanel.cpp

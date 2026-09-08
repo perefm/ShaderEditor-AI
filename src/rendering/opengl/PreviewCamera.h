@@ -7,12 +7,17 @@
 
 namespace shadereditor {
 // Builds the preview camera matrices from orbit/pan interaction state.
+// view() and projection() are exposed separately because Phoenix shaders declare "view" and
+// "projection" as independent engine uniforms; viewProjection() (and therefore "MVP") is derived
+// from them so the combined matrix can never disagree with the individual ones.
 class PreviewCamera {
   public:
+    [[nodiscard]] glm::mat4 view(const PreviewInteractionState& interactionState) const;
+    [[nodiscard]] glm::mat4 projection(const PreviewInteractionState& interactionState, float aspectRatio) const;
     [[nodiscard]] glm::mat4 viewProjection(const PreviewInteractionState& interactionState, float aspectRatio) const;
-    // Isolated model-space rotation applied to the orbited geometry (the same "model" factor
-    // baked into viewProjection()'s combined matrix), exposed separately so shaders that need
-    // it standalone (e.g. to transform normals) can receive Phoenix's "model" uniform correctly.
+    // Base "model" factor for preview geometry. Orbit and pan are camera-space operations, so this
+    // is identity for the free camera and objects keep the transform authored in the file; the
+    // renderer multiplies it by each mesh's animated scene-node transform.
     [[nodiscard]] glm::mat4 modelMatrix(const PreviewInteractionState& interactionState) const;
     glm::vec3 position(const PreviewInteractionState& interactionState) const;
 };

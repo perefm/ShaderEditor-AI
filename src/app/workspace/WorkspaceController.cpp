@@ -149,21 +149,32 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
     const ModelLoadResult result = modelLoader_.load(modelPath);
     if (!result.success) {
         diagnostics_.addError("Failed to import model: " + result.errorMessage);
+        // A failed import must not leave the previous model's statistics on screen as if they
+        // described the file the user just tried to open.
+        modelInfo_ = ModelInfoSummary {};
         return false;
     }
     // Capture the bounding radius before the document is moved into previewRenderer_, so the
     // preview camera can be reframed proportionally to this model's actual size.
     const float boundingRadius = result.document.boundingRadius();
+    // Built while the document is still owned here, so the "Model info" panel reflects exactly
+    // what was imported without needing a second Assimp parse.
+    ModelInfoSummary summary = buildModelInfoSummary(result.document);
     if (!previewRenderer_.setActiveModel(std::move(result.document))) {
         diagnostics_.addError("Imported model has no drawable meshes: " + modelPath.string());
+        modelInfo_ = ModelInfoSummary {};
         return false;
     }
+    modelInfo_ = std::move(summary);
 
     renderSession_.renderTargetKind = RenderTargetKind::Model;
     renderSession_.loadedModelId = modelPath.stem().string();
     // Default to playing the first animation clip (if any) so freshly imported animated models
     // behave like before this feature existed; the user can switch clips via selectAnimation().
     renderSession_.selectedAnimationIndex = previewRenderer_.activeModelAnimationNames().empty() ? -1 : 0;
+    // A camera index from a previously loaded model is meaningless for this one, so always start
+    // on the free camera (Phoenix's CameraNumber < 0) after an import.
+    renderSession_.activeCameraIndex = -1;
     // Rescale zoom/orbit/pan sensitivity to this model's size (built-in primitives are ~1 unit
     // across, so a radius near zero would otherwise leave the camera clipped through/miles away
     // from an arbitrarily large or small imported model). setSceneScale() also resets orbit/pan.
@@ -189,19 +200,46 @@ bool WorkspaceController::selectModel() {
 }
 
 
+void WorkspaceController::selectCamera(int cameraIndex) {
+    // Clamp to the free camera when the index does not name a camera the active model actually
+    // has, so a stale selection can never be uploaded as view/projection (FR-019).
+    const auto cameraCount = static_cast<int>(previewRenderer_.activeModelCameraCount());
+    renderSession_.activeCameraIndex = (cameraIndex >= 0 && cameraIndex < cameraCount) ? cameraIndex : -1;
+}
+
 void WorkspaceController::applyUniform(const std::string& name, UniformValue value) {
     // Uniform edits reuse the preview refresh path so the rendered result updates immediately.
     uniformState_.apply(name, std::move(value));
     updateShaders();
 }
 
-void WorkspaceController::orbitPreview(const glm::vec2& delta) { renderSession_.interactionState.orbit(delta); }
+void WorkspaceController::orbitPreview(const glm::vec2& delta) {
+    if (usingSceneCamera()) {
+        return;
+    }
+    renderSession_.interactionState.orbit(delta);
+}
 
-void WorkspaceController::panPreview(const glm::vec2& delta) { renderSession_.interactionState.pan(delta); }
+void WorkspaceController::panPreview(const glm::vec2& delta) {
+    if (usingSceneCamera()) {
+        return;
+    }
+    renderSession_.interactionState.pan(delta);
+}
 
-void WorkspaceController::zoomPreview(float wheelDelta) { renderSession_.interactionState.zoom(wheelDelta); }
+void WorkspaceController::zoomPreview(float wheelDelta) {
+    if (usingSceneCamera()) {
+        return;
+    }
+    renderSession_.interactionState.zoom(wheelDelta);
+}
 
-void WorkspaceController::resetPreviewInteraction() { renderSession_.interactionState.reset(); }
+void WorkspaceController::resetPreviewInteraction() {
+    if (usingSceneCamera()) {
+        return;
+    }
+    renderSession_.interactionState.reset();
+}
 
 void WorkspaceController::refreshUniforms() {
     uniformState_.setDefinitions(introspectionService_.discover(editorState_.document()));

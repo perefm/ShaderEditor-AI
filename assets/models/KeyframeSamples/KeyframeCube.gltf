@@ -1,0 +1,294 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "ShaderEditor keyframe sample generator"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "KeyframeCubes",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "OrbitingCube",
+      "mesh": 0,
+      "translation": [
+        2.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "PulsingCube",
+      "mesh": 0,
+      "translation": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "CubeMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 3,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "CubeMaterial",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.85,
+          0.55,
+          0.25,
+          1.0
+        ],
+        "metallicFactor": 0.1,
+        "roughnessFactor": 0.6
+      }
+    }
+  ],
+  "animations": [
+    {
+      "name": "OrbitAndSpin",
+      "samplers": [
+        {
+          "input": 4,
+          "output": 5,
+          "interpolation": "LINEAR"
+        },
+        {
+          "input": 4,
+          "output": 6,
+          "interpolation": "LINEAR"
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 0,
+            "path": "translation"
+          }
+        },
+        {
+          "sampler": 1,
+          "target": {
+            "node": 0,
+            "path": "rotation"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pulse",
+      "samplers": [
+        {
+          "input": 4,
+          "output": 7,
+          "interpolation": "LINEAR"
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 1,
+            "path": "scale"
+          }
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 1060,
+      "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAPwAAAD8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAL8AAAC/AAAAvwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAL8AAAA/AAAAPwAAAL8AAAC/AAAAPwAAAD8AAAC/AAAAPwAAAD8AAAA/AAAAvwAAAL8AAAC/AAAAvwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAvwAAAD8AAAC/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAAAPwAAAD8AAAC/AAAAvwAAAD8AAAC/AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAPwAAAL8AAAA/AAAAvwAAAL8AAAA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIC/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAACAvwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAgL8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAgD8AAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAAAAACAPwAAgD8AAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AACAPwAAAAAAAIA/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcAAAAAAAAAgD8AAABAAABAQAAAgEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAPMENT8AAAAA8wQ1PwAAAAAAAIA/AAAAADIxjSQAAAAA8wQ1PwAAAADzBDW/AAAAADIxDSUAAAAAAACAvwAAgD8AAIA/AACAPzMzsz+amRk/MzOzPwAAgD8AAIA/AACAP5qZGT8zM7M/mpkZPwAAgD8AAIA/AACAPw=="
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 288,
+      "byteLength": 288,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 576,
+      "byteLength": 192,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 768,
+      "byteLength": 72,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 840,
+      "byteLength": 20
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 860,
+      "byteLength": 60
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 920,
+      "byteLength": 80
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1000,
+      "byteLength": 60
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [
+        -0.5,
+        -0.5,
+        -0.5
+      ],
+      "max": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC3",
+      "min": [
+        -1.0,
+        -1.0,
+        -1.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 24,
+      "type": "VEC2",
+      "min": [
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 36,
+      "type": "SCALAR",
+      "min": [
+        0
+      ],
+      "max": [
+        23
+      ]
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 5,
+      "type": "SCALAR",
+      "min": [
+        0.0
+      ],
+      "max": [
+        4.0
+      ]
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 5,
+      "type": "VEC3",
+      "min": [
+        -2.0,
+        0.0,
+        -2.0
+      ],
+      "max": [
+        2.0,
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 5,
+      "type": "VEC4",
+      "min": [
+        0.0,
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "max": [
+        0.0,
+        1.0,
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 5,
+      "type": "VEC3",
+      "min": [
+        0.6,
+        0.6,
+        0.6
+      ],
+      "max": [
+        1.4,
+        1.4,
+        1.4
+      ]
+    }
+  ]
+}

@@ -191,7 +191,8 @@ Application::Application()
       renderViewPanel_(workspace_),
       uniformsPanel_(workspace_),
       diagnosticsPanel_(diagnostics_),
-      shaderErrorsPanel_(diagnostics_) {
+      shaderErrorsPanel_(diagnostics_),
+      modelInfoPanel_(workspace_) {
     shaderEditor_.SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
 }
 
@@ -271,6 +272,7 @@ void Application::registerPanels() {
     dockspaceHost_.registerPanel("diagnostics");
     dockspaceHost_.registerPanel("shader-errors");
     dockspaceHost_.registerPanel("configuration");
+    dockspaceHost_.registerPanel("model-info");
 }
 
 void Application::drawUi() {
@@ -287,6 +289,7 @@ void Application::drawUi() {
     drawShaderErrorsWindow();
     drawShaderHelpWindow();
     drawConfigurationWindow();
+    drawModelInfoWindow();
 }
 
 void Application::loadApplicationSettings() {
@@ -507,6 +510,7 @@ void Application::drawMainMenu() {
         ImGui::MenuItem("Diagnostics", nullptr, &showDiagnostics_);
         ImGui::MenuItem("Shader Errors", nullptr, &showShaderErrors_);
         ImGui::MenuItem("Shader Help", nullptr, &showShaderHelp_);
+        ImGui::MenuItem("Model info", nullptr, &showModelInfo_);
         ImGui::MenuItem("Config", nullptr, &showConfiguration_);
         ImGui::EndMenu();
     }
@@ -652,6 +656,41 @@ void Application::drawRenderViewWindow() {
                 }
                 ImGui::EndCombo();
             }
+            // Loop vs hold policy for the selected clip (FR-008): "hold" freezes on the final
+            // keyframe once the clip duration elapses instead of restarting.
+            bool looping = renderViewPanel_.animationLooping();
+            if (ImGui::Checkbox("Loop animation", &looping)) {
+                renderViewPanel_.setAnimationLooping(looping);
+            }
+        }
+
+        // Camera picker: "Free camera" (-1) drives the orbit camera, any other entry binds a
+        // model-authored camera whose keyframes, when present, animate view/projection/uCameraPos.
+        const std::vector<std::string> cameraNames = renderViewPanel_.cameraNames();
+        const int selectedCamera = renderViewPanel_.selectedCameraIndex();
+        const std::string cameraPreview = selectedCamera < 0 || selectedCamera >= static_cast<int>(cameraNames.size())
+                                              ? std::string("Free camera")
+                                              : cameraNames[static_cast<std::size_t>(selectedCamera)];
+        ImGui::SetNextItemWidth(220.0F);
+        if (ImGui::BeginCombo("Camera", cameraPreview.c_str())) {
+            if (ImGui::Selectable("Free camera", selectedCamera < 0)) {
+                renderViewPanel_.selectCamera(-1);
+            }
+            for (std::size_t index = 0; index < cameraNames.size(); ++index) {
+                const bool isSelected = selectedCamera == static_cast<int>(index);
+                if (ImGui::Selectable(cameraNames[index].c_str(), isSelected)) {
+                    renderViewPanel_.selectCamera(static_cast<int>(index));
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (cameraNames.empty()) {
+            ImGui::TextDisabled("This model has no cameras.");
+        } else if (selectedCamera >= 0) {
+            ImGui::TextDisabled("Scene camera active - orbit/pan/zoom disabled.");
         }
         ImGui::Separator();
         if (ImGui::Button("Reset View")) {
@@ -896,6 +935,19 @@ void Application::drawConfigurationWindow() {
     ImGui::End();
 }
 
+void Application::drawModelInfoWindow() {
+    if (!showModelInfo_) {
+        return;
+    }
+
+    if (ImGui::Begin("Model info", &showModelInfo_)) {
+        ImGui::BeginChild("model-info-scroll");
+        modelInfoPanel_.draw();
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
 void Application::drawShaderErrorsWindow() {
     if (!showShaderErrors_) {
         return;
@@ -931,10 +983,17 @@ void Application::drawShaderHelpWindow() {
             "The uniforms below are computed and uploaded automatically every frame by the app;\n"
             "they never appear as editable rows in the Uniforms panel, so there is nothing to fill in.\n\n"
             "Camera / transform:\n"
-            "  MVP (mat4): model-view-projection matrix for the preview camera.\n"
-            "  model (mat4): the preview's model-space rotation matrix (orbit only, no projection);\n"
+            "  view (mat4): view matrix of the active camera (free camera or the model camera\n"
+            "    selected in the Render panel), supplied exactly like Phoenix does.\n"
+            "  projection (mat4): projection matrix of the active camera.\n"
+            "  MVP (mat4): model-view-projection matrix, always projection * view * model.\n"
+            "  model (mat4): model matrix of the mesh being drawn, as authored in the model file\n"
+            "    (plus its animated scene-node transform for node-keyframed objects). Orbit and pan\n"
+            "    move the free camera, not the model, so this never contains preview navigation;\n"
             "    used by shaders that need to transform normals/tangents into world space.\n"
-            "  uCameraPos (vec3): current camera position in world space.\n\n"
+            "  uCameraPos (vec3): world-space position of the active camera; it follows the\n"
+            "    selected model camera, including its keyframe animation, every frame.\n"
+            "  These engine matrices are never listed in the Uniforms panel.\n\n"
             "Playback clock (spec 004 Phoenix auto-uniforms):\n"
             "  t (float): elapsed seconds since playback was last reset; drives time-based effects.\n"
             "  tend (float): configured section duration in seconds (Render panel 'tend' field).\n"

@@ -1,4 +1,4 @@
-﻿#include "rendering/opengl/PreviewRenderer.h"
+#include "rendering/opengl/PreviewRenderer.h"
 
 #include <GLFW/glfw3.h>
 
@@ -6,8 +6,11 @@
 #include <stb_image.h>
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/trigonometric.hpp>
 
+#include <algorithm>
 #include <functional>
+#include <numeric>
 #include <regex>
 #include <string_view>
 #include <utility>
@@ -140,9 +143,61 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
         // The animator recomputes bone transforms fresh every frame from the current playback
         // time, so animation always reflects Play/Pause/Reset state exactly (no stale caching).
         const std::vector<glm::mat4> boneTransforms =
-            skeletalAnimator_.boneTransforms(*activeModel_, session.playback.elapsedSeconds(), session.selectedAnimationIndex);
-        for (std::size_t meshIndex = 0; meshIndex < activeModel_->meshes.size(); ++meshIndex) {
-            renderModelMesh(activeModel_->meshes[meshIndex], activeModelBuffers_[meshIndex], program_, boneTransforms);
+            skeletalAnimator_.boneTransforms(*activeModel_, session.playback.elapsedSeconds(), session.selectedAnimationIndex, session.animationLoopMode);
+        // gBones is identical for every mesh of the model, so it is uploaded once per frame rather
+        // than once per mesh (FR-014).
+        if (!boneTransforms.empty()) {
+            const GLint bonesLocation = glGetUniformLocation(program_, "gBones");
+            if (bonesLocation >= 0) {
+                glUniformMatrix4fv(bonesLocation, static_cast<GLsizei>(boneTransforms.size()), GL_FALSE,
+                                   glm::value_ptr(boneTransforms.front()));
+            }
+        }
+
+        const ResolvedCamera camera = resolveActiveCamera(session);
+        const glm::mat4 baseModelMatrix = previewCamera_.modelMatrix(session.interactionState);
+
+        // The whole node hierarchy is evaluated once per frame rather than once per mesh. Walking
+        // it per mesh is O(meshes * nodes) and allocates each time, which dominated frame time on
+        // scenes made of many small meshes (planets.fbx: 447 meshes over 255 nodes).
+        const bool useNodeTransforms = !activeModel_->hasSkeleton && !activeModel_->sceneNodes.empty();
+        const std::vector<glm::mat4> nodeTransforms =
+            useNodeTransforms ? skeletalAnimator_.nodeWorldTransforms(*activeModel_, session.playback.elapsedSeconds(),
+                                                                     session.selectedAnimationIndex, session.animationLoopMode)
+                              : std::vector<glm::mat4>();
+
+        // Draw meshes grouped by material so identical material uniforms and textures are bound
+        // once per material instead of once per mesh. Entries are instances, not meshes: a mesh
+        // referenced by many nodes must be drawn once per placement.
+        const std::vector<std::size_t>& drawOrder = materialSortedMeshOrder();
+        int boundMaterial = -1;
+        GLuint boundVao = 0;
+        for (const std::size_t instanceIndex : drawOrder) {
+            const ModelMeshInstance& instance = activeModel_->meshInstances[instanceIndex];
+            ModelMesh& mesh = activeModel_->meshes[instance.meshIndex];
+
+            // Node-level keyframe animation (an object that moves without a skeleton) lives in the
+            // mesh's scene-node transform, so it must be folded into the model matrix per instance.
+            // Skinned models are deliberately excluded: gBones already bakes the node hierarchy in,
+            // and applying it again here would transform those vertices twice.
+            glm::mat4 meshModelMatrix = baseModelMatrix;
+            if (useNodeTransforms && instance.nodeIndex >= 0 &&
+                static_cast<std::size_t>(instance.nodeIndex) < nodeTransforms.size()) {
+                meshModelMatrix = baseModelMatrix * nodeTransforms[static_cast<std::size_t>(instance.nodeIndex)];
+            }
+            uploadMeshTransforms(program_, camera, meshModelMatrix);
+
+            if (mesh.materialIndex < 0 || mesh.materialIndex != boundMaterial) {
+                bindMeshMaterial(mesh.material, program_);
+                boundMaterial = mesh.materialIndex;
+            }
+
+            const ModelMeshBuffers& buffers = activeModelBuffers_[instance.meshIndex];
+            if (buffers.vao != boundVao) {
+                glBindVertexArray(buffers.vao);
+                boundVao = buffers.vao;
+            }
+            glDrawElements(GL_TRIANGLES, buffers.indexCount, GL_UNSIGNED_INT, nullptr);
         }
 
         glBindVertexArray(0);
@@ -238,6 +293,7 @@ void PreviewRenderer::destroyGpuResources() {
         }
     }
     activeModelBuffers_.clear();
+    materialSortedOrder_.clear();
     activeModelGpuResourcesReady_ = false;
 }
 
@@ -384,6 +440,48 @@ std::vector<std::string> PreviewRenderer::activeModelAnimationNames() const {
     return names;
 }
 
+std::vector<std::string> PreviewRenderer::activeModelCameraNames() const {
+    std::vector<std::string> names;
+    if (activeModel_ == nullptr) {
+        return names;
+    }
+    names.reserve(activeModel_->cameras.size());
+    for (const auto& camera : activeModel_->cameras) {
+        names.push_back(camera.name.empty() ? ("Camera " + std::to_string(names.size())) : camera.name);
+    }
+    return names;
+}
+
+ResolvedCamera PreviewRenderer::resolveActiveCamera(const RenderSession& session) const {
+    const float aspect = framebufferHeight_ > 0 ? static_cast<float>(framebufferWidth_) / static_cast<float>(framebufferHeight_) : 1.0F;
+
+    if (session.renderTargetKind == RenderTargetKind::Model && activeModel_ != nullptr && session.activeCameraIndex >= 0) {
+        // Scene cameras use the same near/far scaling rule as the free camera so a model camera
+        // never clips geometry the free camera would have shown.
+        const float nearPlane = 0.05F * session.interactionState.sceneScale;
+        const float farPlane = 200.0F * session.interactionState.sceneScale;
+        const auto resolved = modelCameraResolver_.resolve(*activeModel_,
+                                                           session.activeCameraIndex,
+                                                           session.playback.elapsedSeconds(),
+                                                           session.selectedAnimationIndex,
+                                                           session.animationLoopMode,
+                                                           aspect,
+                                                           glm::radians(45.0F),
+                                                           nearPlane,
+                                                           farPlane);
+        if (resolved.has_value()) {
+            return *resolved;
+        }
+        // An invalid index falls through to the free camera rather than failing to render.
+    }
+
+    ResolvedCamera freeCamera;
+    freeCamera.view = previewCamera_.view(session.interactionState);
+    freeCamera.projection = previewCamera_.projection(session.interactionState, aspect);
+    freeCamera.position = previewCamera_.position(session.interactionState);
+    return freeCamera;
+}
+
 bool PreviewRenderer::setActiveModel(ModelDocument document) {
     if (document.meshes.empty()) {
         return false;
@@ -402,6 +500,7 @@ bool PreviewRenderer::setActiveModel(ModelDocument document) {
         }
     }
     activeModelBuffers_.clear();
+    materialSortedOrder_.clear();
     activeModelGpuResourcesReady_ = false;
     activeModel_ = std::make_unique<ModelDocument>(std::move(document));
     return true;
@@ -532,31 +631,19 @@ GLuint PreviewRenderer::uploadRgbaTexture(const unsigned char* pixels, int width
 void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms) {
     glUseProgram(program);
 
-    const GLint mvpLocation = glGetUniformLocation(program, "MVP");
-    if (mvpLocation >= 0) {
-        // The preview camera owns all scene navigation so shaders can rely on a consistent MVP uniform.
-        const float aspect = framebufferHeight_ > 0 ? static_cast<float>(framebufferWidth_) / static_cast<float>(framebufferHeight_) : 1.0F;
-        const glm::mat4 mvp = previewCamera_.viewProjection(session.interactionState, aspect);
-        glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
-    }
-    const GLint cameraLocation = glGetUniformLocation(program, "uCameraPos");
-    if (cameraLocation >= 0) {
-        const glm::vec3 cameraPosition = previewCamera_.position(session.interactionState);
-        glUniform3fv(cameraLocation, 1, glm::value_ptr(cameraPosition));
-    }
-    const GLint modelLocation = glGetUniformLocation(program, "model");
-    if (modelLocation >= 0) {
-        // Phoenix shaders (bone_animation/bump_mapping/pbr_animation, etc.) declare a "model"
-        // uniform for transforming normals/tangents into world space; like MVP/uCameraPos this
-        // is entirely owned by the preview camera, never user-edited (see FR-012).
-        const glm::mat4 model = previewCamera_.modelMatrix(session.interactionState);
-        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, glm::value_ptr(model));
-    }
+    // One resolved camera drives every camera-derived uniform this frame. Because "MVP" is
+    // literally projection * view * model, it can never disagree with the individual matrices,
+    // and uCameraPos always follows the currently selected camera (free or scene, static or
+    // animated) without any cross-frame caching to invalidate.
+    const ResolvedCamera camera = resolveActiveCamera(session);
+    const glm::mat4 modelMatrix = previewCamera_.modelMatrix(session.interactionState);
+    uploadMeshTransforms(program, camera, modelMatrix);
 
     int textureUnit = 0;
     for (const auto& uniform : uniforms) {
         const GLint location = glGetUniformLocation(program, uniform.name.c_str());
-        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos" || uniform.name == "model") {
+        if (location < 0 || uniform.name == "MVP" || uniform.name == "uCameraPos" || uniform.name == "model" ||
+            uniform.name == "view" || uniform.name == "projection") {
             continue;
         }
 
@@ -675,51 +762,72 @@ void PreviewRenderer::beginModelFrame(GLuint program, int width, int height, con
     glUseProgram(program);
 }
 
-void PreviewRenderer::renderModelMesh(const ModelMesh& mesh,
-                                      const ModelMeshBuffers& buffers,
-                                      GLuint program,
-                                      const std::vector<glm::mat4>& boneTransforms) {
+void PreviewRenderer::uploadMeshTransforms(GLuint program, const ResolvedCamera& camera, const glm::mat4& modelMatrix) {
+    const GLint viewLocation = glGetUniformLocation(program, "view");
+    if (viewLocation >= 0) {
+        glUniformMatrix4fv(viewLocation, 1, GL_FALSE, glm::value_ptr(camera.view));
+    }
+    const GLint projectionLocation = glGetUniformLocation(program, "projection");
+    if (projectionLocation >= 0) {
+        glUniformMatrix4fv(projectionLocation, 1, GL_FALSE, glm::value_ptr(camera.projection));
+    }
+    const GLint mvpLocation = glGetUniformLocation(program, "MVP");
+    if (mvpLocation >= 0) {
+        const glm::mat4 mvp = camera.projection * camera.view * modelMatrix;
+        glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
+    }
+    const GLint cameraLocation = glGetUniformLocation(program, "uCameraPos");
+    if (cameraLocation >= 0) {
+        glUniform3fv(cameraLocation, 1, glm::value_ptr(camera.position));
+    }
+    const GLint modelLocation = glGetUniformLocation(program, "model");
+    if (modelLocation >= 0) {
+        // Phoenix shaders (bone_animation/bump_mapping/pbr_animation, etc.) declare a "model"
+        // uniform for transforming normals/tangents into world space; like MVP/view/projection/
+        // uCameraPos this is entirely engine-owned, never user-edited (see FR-012).
+        glUniformMatrix4fv(modelLocation, 1, GL_FALSE, glm::value_ptr(modelMatrix));
+    }
+}
+
+void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) {
     // Upload the material colors using Phoenix's exact uniform names (FR-016) so bump-mapping,
     // PBR, etc. shaders authored against Phoenix conventions work unmodified against imports.
     const GLint ambientLocation = glGetUniformLocation(program, "Mat_Ka");
     if (ambientLocation >= 0) {
-        glUniform3fv(ambientLocation, 1, glm::value_ptr(mesh.material.colorAmbient));
+        glUniform3fv(ambientLocation, 1, glm::value_ptr(material.colorAmbient));
     }
     const GLint diffuseLocation = glGetUniformLocation(program, "Mat_Kd");
     if (diffuseLocation >= 0) {
-        glUniform3fv(diffuseLocation, 1, glm::value_ptr(mesh.material.colorDiffuse));
+        glUniform3fv(diffuseLocation, 1, glm::value_ptr(material.colorDiffuse));
     }
     const GLint specularLocation = glGetUniformLocation(program, "Mat_Ks");
     if (specularLocation >= 0) {
-        glUniform3fv(specularLocation, 1, glm::value_ptr(mesh.material.colorSpecular));
+        glUniform3fv(specularLocation, 1, glm::value_ptr(material.colorSpecular));
     }
     const GLint specularStrengthLocation = glGetUniformLocation(program, "Mat_KsStrenght");
     if (specularStrengthLocation >= 0) {
-        glUniform1f(specularStrengthLocation, mesh.material.specularStrength);
+        glUniform1f(specularStrengthLocation, material.specularStrength);
     }
 
-    // Upload bone matrices as the gBones[] array (FR-014), matching Phoenix's skinning shaders.
-    // Static (non-skeletal) meshes simply have no gBones uniform declared, so the lookup is a no-op.
-    if (!boneTransforms.empty()) {
-        const GLint bonesLocation = glGetUniformLocation(program, "gBones");
-        if (bonesLocation >= 0) {
-            glUniformMatrix4fv(bonesLocation, static_cast<GLsizei>(boneTransforms.size()), GL_FALSE, glm::value_ptr(boneTransforms.front()));
-        }
-    }
-
-    // Bind every texture slot the mesh's material carries, using the exact Phoenix uniform name
+    // Bind every texture slot the material carries, using the exact Phoenix uniform name
     // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015). Textures
     // may either live on disk (sourcePath) or be embedded directly in the model file (glTF/.glb),
     // in which case embeddedImageData holds the still-encoded bytes to decode instead.
     int textureUnit = 0;
-    for (const auto& slot : mesh.material.textureSlots) {
+    for (auto& slot : material.textureSlots) {
         const GLint location = glGetUniformLocation(program, slot.shaderUniformName.c_str());
         if (location < 0) {
             continue;
         }
-        const GLuint texture = slot.embeddedImageData.empty()
-                                    ? textureForPath(slot.sourcePath)
-                                    : textureForEmbeddedData(slot.embeddedImageData);
+        // ModelTextureSlot::glTextureId memoizes the resolved GL texture for this slot. Without it
+        // an embedded texture would be re-hashed over its full encoded byte range on every bind,
+        // every frame, just to look up an already-uploaded texture.
+        GLuint texture = slot.glTextureId;
+        if (texture == 0) {
+            texture = slot.embeddedImageData.empty() ? textureForPath(slot.sourcePath)
+                                                     : textureForEmbeddedData(slot.embeddedImageData);
+            slot.glTextureId = texture;
+        }
         if (texture == 0) {
             continue;
         }
@@ -728,8 +836,26 @@ void PreviewRenderer::renderModelMesh(const ModelMesh& mesh,
         glUniform1i(location, textureUnit);
         ++textureUnit;
     }
+}
 
-    glBindVertexArray(buffers.vao);
-    glDrawElements(GL_TRIANGLES, buffers.indexCount, GL_UNSIGNED_INT, nullptr);
+const std::vector<std::size_t>& PreviewRenderer::materialSortedMeshOrder() {
+    // Computed once per loaded model, not per frame: the material assignment is fixed for the
+    // lifetime of the document, so the draw order never changes. Entries index meshInstances, so
+    // every placement of an instanced mesh gets drawn.
+    if (!materialSortedOrder_.empty() || activeModel_ == nullptr || activeModel_->meshInstances.empty()) {
+        return materialSortedOrder_;
+    }
+    materialSortedOrder_.resize(activeModel_->meshInstances.size());
+    std::iota(materialSortedOrder_.begin(), materialSortedOrder_.end(), std::size_t {0});
+    // Stable sort keeps the model's authored order within a material group, so draw order stays
+    // deterministic (important for meshes that rely on back-to-front blending order).
+    std::stable_sort(materialSortedOrder_.begin(), materialSortedOrder_.end(),
+                     [this](std::size_t lhs, std::size_t rhs) {
+                         const auto& meshes = activeModel_->meshes;
+                         const auto& instances = activeModel_->meshInstances;
+                         return meshes[instances[lhs].meshIndex].materialIndex <
+                                meshes[instances[rhs].meshIndex].materialIndex;
+                     });
+    return materialSortedOrder_;
 }
 }  // namespace shadereditor

@@ -7,6 +7,7 @@
 #include "editor/ShaderEditorState.h"
 #include "rendering/models/AssimpModelLoader.h"
 #include "rendering/models/ModelDocument.h"
+#include "rendering/models/ModelInfoSummary.h"
 #include "rendering/opengl/PreviewRenderer.h"
 #include "rendering/shaders/RenderSession.h"
 #include "rendering/shaders/UniformIntrospectionService.h"
@@ -78,6 +79,22 @@ class WorkspaceController {
     // pose). Out-of-range indices are also treated as "no animation" by SkeletalAnimator.
     void selectAnimation(int animationIndex) { renderSession_.selectedAnimationIndex = animationIndex; }
     [[nodiscard]] int selectedAnimationIndex() const { return renderSession_.selectedAnimationIndex; }
+    // Whether the active clip wraps or holds once playback time passes its duration.
+    void setAnimationLooping(bool looping) {
+        renderSession_.animationLoopMode = looping ? AnimationLoopMode::Loop : AnimationLoopMode::Hold;
+    }
+    [[nodiscard]] bool animationLooping() const { return renderSession_.animationLoopMode == AnimationLoopMode::Loop; }
+
+    // Names of the cameras authored inside the active model, in the order their indices refer to.
+    [[nodiscard]] std::vector<std::string> modelCameraNames() const { return previewRenderer_.activeModelCameraNames(); }
+    // Chooses the camera the preview renders through: -1 is the free orbit/pan camera (Phoenix's
+    // CameraNumber < 0), >= 0 selects a model camera. Out-of-range indices fall back to the free
+    // camera so the selection can never point at a camera the current model does not have.
+    void selectCamera(int cameraIndex);
+    [[nodiscard]] int selectedCameraIndex() const { return renderSession_.activeCameraIndex; }
+    // Statistics for the currently loaded model, refreshed on every successful openModel() and
+    // cleared when a load fails, so the "Model info" panel never shows stale or partial data.
+    [[nodiscard]] const ModelInfoSummary& modelInfo() const { return modelInfo_; }
 
     [[nodiscard]] ShaderEditorState& editorState() { return editorState_; }
     [[nodiscard]] const ShaderEditorState& editorState() const { return editorState_; }
@@ -86,6 +103,12 @@ class WorkspaceController {
 
   private:
     void refreshUniforms();
+    // True while a model-authored camera is driving the preview. Interaction is suppressed in
+    // that case so orbit/pan/zoom cannot silently mutate the free camera's stored framing, which
+    // must be restored untouched when the user switches back to it (FR-018).
+    [[nodiscard]] bool usingSceneCamera() const {
+        return renderSession_.renderTargetKind == RenderTargetKind::Model && renderSession_.activeCameraIndex >= 0;
+    }
 
     DiagnosticsState& diagnostics_;
     ShaderFileService fileService_;
@@ -95,6 +118,7 @@ class WorkspaceController {
     ShaderEditorState editorState_;
     UniformState uniformState_;
     RenderSession renderSession_;
+    ModelInfoSummary modelInfo_;
     PlaybackClockState playbackClock_;
     RenderMetrics renderMetrics_;
     // Wall-clock timestamp of the previous renderPreview() call, used to compute the frame's

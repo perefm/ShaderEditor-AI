@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 
@@ -50,40 +51,43 @@ glm::mat4 sampleChannel(const ModelDocument::AnimationChannel& channel, float ti
     const glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0F), scale);
     return translationMatrix * rotationMatrix * scaleMatrix;
 }
-}
 
-std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& document, float elapsedSeconds, int animationIndex) const {
-    std::vector<glm::mat4> result(document.boneCount, glm::mat4(1.0F));
-    if (!document.hasSkeleton || document.sceneNodes.empty()) {
-        return result;
-    }
+// Resolves the active clip (nullptr when the caller asked for "no animation" via a negative or
+// out-of-range index) together with the clip-local time to sample it at.
+struct ActiveClip {
+    const ModelDocument::AnimationClip* clip {nullptr};
+    float time {0.0F};
+};
 
+ActiveClip resolveActiveClip(const ModelDocument& document, float elapsedSeconds, int animationIndex, AnimationLoopMode loopMode) {
     // A negative/out-of-range index (including the "no animation selected" default of -1) means
     // the caller wants the static bind pose, so skip clip sampling entirely.
     const bool hasValidIndex = animationIndex >= 0 && static_cast<std::size_t>(animationIndex) < document.animations.size();
-    const ModelDocument::AnimationClip* clip = hasValidIndex ? &document.animations[static_cast<std::size_t>(animationIndex)] : nullptr;
-    float animationTime = 0.0F;
+    if (!hasValidIndex) {
+        return {};
+    }
+    const ModelDocument::AnimationClip& clip = document.animations[static_cast<std::size_t>(animationIndex)];
+    return {&clip, normalizeAnimationTime(elapsedSeconds, clip.durationSeconds, loopMode)};
+}
+
+// Computes every scene node's global (model-space) transform by walking from the root down,
+// multiplying each node's local transform (animated, if a channel exists for it) by its parent's
+// already-computed global transform - the same hierarchy walk Phoenix performs. Shared by the
+// bone path and the animated-camera path so both are guaranteed to agree.
+std::vector<glm::mat4> globalNodeTransforms(const ModelDocument& document, const ActiveClip& active) {
     std::unordered_map<std::string, const ModelDocument::AnimationChannel*> channelByNodeName;
-    if (clip != nullptr && clip->durationSeconds > 0.0F) {
-        // Loop the clip by wrapping elapsed time into [0, durationSeconds).
-        animationTime = std::fmod(elapsedSeconds, clip->durationSeconds);
-        if (animationTime < 0.0F) {
-            animationTime += clip->durationSeconds;
-        }
-        for (const auto& channel : clip->channels) {
+    if (active.clip != nullptr) {
+        for (const auto& channel : active.clip->channels) {
             channelByNodeName[channel.boneName] = &channel;
         }
     }
 
-    // Compute each node's global (model-space) transform by walking from the root down,
-    // multiplying each node's local transform (animated, if a channel exists for it) by its
-    // parent's already-computed global transform - the same hierarchy walk Phoenix performs.
     std::vector<glm::mat4> globalTransforms(document.sceneNodes.size(), glm::mat4(1.0F));
     for (std::size_t nodeIndex = 0; nodeIndex < document.sceneNodes.size(); ++nodeIndex) {
         const auto& node = document.sceneNodes[nodeIndex];
         const auto channelIt = channelByNodeName.find(node.name);
         const glm::mat4 localTransform = channelIt != channelByNodeName.end()
-                                              ? sampleChannel(*channelIt->second, animationTime)
+                                              ? sampleChannel(*channelIt->second, active.time)
                                               : node.localTransform;
         // Scene nodes are stored in depth-first order (see AssimpModelLoader::flattenNodeHierarchy),
         // so a node's parent always has a lower index and is already resolved by this point.
@@ -91,6 +95,38 @@ std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& doc
                                            ? globalTransforms[static_cast<std::size_t>(node.parentIndex)] * localTransform
                                            : localTransform;
     }
+    return globalTransforms;
+}
+}
+
+float normalizeAnimationTime(float elapsedSeconds, float durationSeconds, AnimationLoopMode mode) {
+    if (!std::isfinite(elapsedSeconds) || !std::isfinite(durationSeconds) || durationSeconds <= 0.0F) {
+        return 0.0F;
+    }
+    if (elapsedSeconds <= 0.0F) {
+        return 0.0F;
+    }
+    if (mode == AnimationLoopMode::Hold) {
+        return std::min(elapsedSeconds, durationSeconds);
+    }
+    float wrapped = std::fmod(elapsedSeconds, durationSeconds);
+    if (wrapped < 0.0F) {
+        wrapped += durationSeconds;
+    }
+    return wrapped;
+}
+
+std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& document,
+                                                        float elapsedSeconds,
+                                                        int animationIndex,
+                                                        AnimationLoopMode loopMode) const {
+    std::vector<glm::mat4> result(document.boneCount, glm::mat4(1.0F));
+    if (!document.hasSkeleton || document.sceneNodes.empty()) {
+        return result;
+    }
+
+    const ActiveClip active = resolveActiveClip(document, elapsedSeconds, animationIndex, loopMode);
+    const std::vector<glm::mat4> globalTransforms = globalNodeTransforms(document, active);
 
     // Build a bone name -> scene node index lookup once, then combine each bone's global node
     // transform with its inverse bind ("offset") matrix, exactly as Phoenix's Model::Draw does
@@ -108,5 +144,36 @@ std::vector<glm::mat4> SkeletalAnimator::boneTransforms(const ModelDocument& doc
     }
 
     return result;
+}
+
+glm::mat4 SkeletalAnimator::nodeWorldTransform(const ModelDocument& document,
+                                               const std::string& nodeName,
+                                               float elapsedSeconds,
+                                               int animationIndex,
+                                               AnimationLoopMode loopMode) const {
+    if (document.sceneNodes.empty() || nodeName.empty()) {
+        return glm::mat4(1.0F);
+    }
+
+    const auto nodeIt = std::find_if(document.sceneNodes.begin(), document.sceneNodes.end(),
+                                     [&nodeName](const ModelDocument::SceneNode& node) { return node.name == nodeName; });
+    if (nodeIt == document.sceneNodes.end()) {
+        return glm::mat4(1.0F);
+    }
+
+    const ActiveClip active = resolveActiveClip(document, elapsedSeconds, animationIndex, loopMode);
+    const std::vector<glm::mat4> globalTransforms = globalNodeTransforms(document, active);
+    return globalTransforms[static_cast<std::size_t>(std::distance(document.sceneNodes.begin(), nodeIt))];
+}
+
+std::vector<glm::mat4> SkeletalAnimator::nodeWorldTransforms(const ModelDocument& document,
+                                                             float elapsedSeconds,
+                                                             int animationIndex,
+                                                             AnimationLoopMode loopMode) const {
+    if (document.sceneNodes.empty()) {
+        return {};
+    }
+    const ActiveClip active = resolveActiveClip(document, elapsedSeconds, animationIndex, loopMode);
+    return globalNodeTransforms(document, active);
 }
 }  // namespace shadereditor

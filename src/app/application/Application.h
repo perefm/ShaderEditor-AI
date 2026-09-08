@@ -5,6 +5,7 @@
 #include "app/workspace/WorkspaceController.h"
 #include "ui/dockspace/DockspaceHost.h"
 #include "ui/panels/DiagnosticsPanel.h"
+#include "ui/panels/ModelInfoPanel.h"
 #include "ui/panels/RenderViewPanel.h"
 #include "ui/panels/ShaderEditorPanel.h"
 #include "ui/panels/ShaderErrorsPanel.h"
@@ -46,6 +47,7 @@ class Application {
     void drawShaderErrorsWindow();
     void drawShaderHelpWindow();
     void drawConfigurationWindow();
+    void drawModelInfoWindow();
     void registerPanels();
     void drawUi();
     void loadApplicationSettings();
@@ -65,6 +67,7 @@ class Application {
     UniformsPanel uniformsPanel_;
     DiagnosticsPanel diagnosticsPanel_;
     ShaderErrorsPanel shaderErrorsPanel_;
+    ModelInfoPanel modelInfoPanel_;
     DocumentDialogs documentDialogs_;
     // Runtime paths for the bundled example shaders.
     std::filesystem::path exampleShaderPath_;
@@ -76,6 +79,7 @@ class Application {
     bool showShaderErrors_ {true};
     bool showShaderHelp_ {false};
     bool showConfiguration_ {false};
+    bool showModelInfo_ {false};
     TextEditor shaderEditor_;
     std::string shaderEditorText_;
     float editorTextScale_ {1.0F};

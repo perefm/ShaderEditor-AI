@@ -8,6 +8,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <array>
+#include <string>
 #include <unordered_map>
 
 namespace shadereditor {
@@ -211,6 +212,30 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
     return result;
 }
 
+// Imports the cameras authored in the scene (aiScene::mCameras). Assimp names each camera after
+// the scene node that carries it, so the node name doubles as the link into the node hierarchy -
+// which is what lets a keyframe-animated camera node move the camera (see ModelCameraResolver).
+void convertCameras(const aiScene* scene, ModelDocument& document) {
+    document.cameras.reserve(scene->mNumCameras);
+    for (unsigned int cameraIndex = 0; cameraIndex < scene->mNumCameras; ++cameraIndex) {
+        const aiCamera* camera = scene->mCameras[cameraIndex];
+        ModelCamera converted;
+        converted.name = camera->mName.C_Str();
+        converted.nodeName = converted.name;
+        converted.position = toGlmVec3(camera->mPosition);
+        converted.lookAt = toGlmVec3(camera->mLookAt);
+        converted.up = toGlmVec3(camera->mUp);
+        converted.horizontalFovRadians = camera->mHorizontalFOV;
+        converted.aspectRatio = camera->mAspect;
+        converted.nearPlane = camera->mClipPlaneNear;
+        converted.farPlane = camera->mClipPlaneFar;
+        if (converted.name.empty()) {
+            converted.name = "Camera " + std::to_string(cameraIndex);
+        }
+        document.cameras.push_back(std::move(converted));
+    }
+}
+
 void convertAnimations(const aiScene* scene, ModelDocument& document) {
     for (unsigned int animationIndex = 0; animationIndex < scene->mNumAnimations; ++animationIndex) {
         const aiAnimation* animation = scene->mAnimations[animationIndex];
@@ -256,6 +281,69 @@ void convertAnimations(const aiScene* scene, ModelDocument& document) {
         document.animations.push_back(std::move(clip));
     }
 }
+
+// Records the scene-node placement of every mesh reference in the tree. Assimp's node mMeshes are
+// indices into aiScene::mMeshes, which is exactly the order document.meshes was built in, so the
+// index maps across directly. A mesh may be referenced by many nodes (instancing): each reference
+// becomes its own draw instance, while nodeName/nodeIndex keep the first placement so single-node
+// meshes keep behaving as before.
+void assignMeshNodes(const aiNode* node, ModelDocument& document, const std::unordered_map<std::string, int>& nodeIndexByName) {
+    const auto foundNode = nodeIndexByName.find(node->mName.C_Str());
+    const int thisNodeIndex = foundNode != nodeIndexByName.end() ? foundNode->second : -1;
+
+    for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+        const unsigned int meshIndex = node->mMeshes[i];
+        if (meshIndex >= document.meshes.size()) {
+            continue;
+        }
+        if (document.meshes[meshIndex].nodeName.empty()) {
+            document.meshes[meshIndex].nodeName = node->mName.C_Str();
+            document.meshes[meshIndex].nodeIndex = thisNodeIndex;
+        }
+        document.meshInstances.push_back(ModelMeshInstance {meshIndex, thisNodeIndex});
+    }
+    for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+        assignMeshNodes(node->mChildren[i], document, nodeIndexByName);
+    }
+}
+
+// True when two materials would produce identical GPU state, so meshes using them can share a
+// single set of material-uniform uploads and texture binds.
+bool materialsEqual(const ModelMaterial& a, const ModelMaterial& b) {
+    if (a.colorAmbient != b.colorAmbient || a.colorDiffuse != b.colorDiffuse || a.colorSpecular != b.colorSpecular ||
+        a.specularStrength != b.specularStrength || a.textureSlots.size() != b.textureSlots.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.textureSlots.size(); ++i) {
+        const ModelTextureSlot& lhs = a.textureSlots[i];
+        const ModelTextureSlot& rhs = b.textureSlots[i];
+        if (lhs.shaderUniformName != rhs.shaderUniformName || lhs.sourcePath != rhs.sourcePath ||
+            lhs.embeddedImageData != rhs.embeddedImageData) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Collapses the per-mesh materials into a deduplicated table, pointing each mesh at its entry.
+// Importers hand out one aiMaterial reference per mesh, so a scene like planets.fbx ends up with
+// hundreds of meshes referencing only a handful of distinct materials.
+void deduplicateMaterials(ModelDocument& document) {
+    for (ModelMesh& mesh : document.meshes) {
+        int found = -1;
+        for (std::size_t i = 0; i < document.materials.size(); ++i) {
+            if (materialsEqual(document.materials[i], mesh.material)) {
+                found = static_cast<int>(i);
+                break;
+            }
+        }
+        if (found < 0) {
+            found = static_cast<int>(document.materials.size());
+            document.materials.push_back(mesh.material);
+        }
+        mesh.materialIndex = found;
+    }
+}
 }
 
 ModelLoadResult AssimpModelLoader::load(const std::filesystem::path& modelPath) const {
@@ -295,25 +383,56 @@ ModelLoadResult AssimpModelLoader::load(const std::filesystem::path& modelPath) 
     for (unsigned int meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
         document.meshes.push_back(convertMesh(scene->mMeshes[meshIndex], scene, modelDirectory, document, boneIndexByName));
     }
+    assignMeshNodes(scene->mRootNode, document, nodeIndexByName);
+    // A mesh no node references would otherwise never be drawn; keep it visible at identity.
+    if (document.meshInstances.empty() && !document.meshes.empty()) {
+        for (std::size_t meshIndex = 0; meshIndex < document.meshes.size(); ++meshIndex) {
+            document.meshInstances.push_back(ModelMeshInstance {meshIndex, -1});
+        }
+    }
+    deduplicateMaterials(document);
     document.boneCount = document.bones.size();
 
     convertAnimations(scene, document);
+    convertCameras(scene, document);
+    document.materialCount = scene->mNumMaterials;
 
-    // Compute the bind-pose AABB across every vertex of every mesh so the preview camera can
-    // scale zoom/orbit/pan proportionally to this model's actual size instead of assuming the
-    // ~1-unit scale of the built-in primitives.
+    // Compute the bind-pose AABB so the preview camera can scale zoom/orbit/pan proportionally to
+    // this model's actual size instead of assuming the ~1-unit scale of the built-in primitives.
+    // Instances are placed by their node's static world transform, because a scene built from
+    // repeated props keeps every copy at the origin in mesh-local space and would otherwise be
+    // measured far smaller than it is drawn. Skinned models are excluded for the same reason the
+    // renderer excludes them: their placement comes from gBones, not from the node chain.
+    std::vector<glm::mat4> staticWorldTransforms(document.sceneNodes.size(), glm::mat4(1.0F));
+    for (std::size_t i = 0; i < document.sceneNodes.size(); ++i) {
+        const auto& node = document.sceneNodes[i];
+        // Nodes are stored depth-first, so a parent always has a lower index and is already final.
+        staticWorldTransforms[i] = node.parentIndex >= 0
+                                       ? staticWorldTransforms[static_cast<std::size_t>(node.parentIndex)] * node.localTransform
+                                       : node.localTransform;
+    }
+
     bool hasAnyVertex = false;
     glm::vec3 boundsMin {0.0F};
     glm::vec3 boundsMax {0.0F};
-    for (const ModelMesh& mesh : document.meshes) {
-        for (const ModelVertex& vertex : mesh.vertices) {
+    for (const ModelMeshInstance& instance : document.meshInstances) {
+        if (instance.meshIndex >= document.meshes.size()) {
+            continue;
+        }
+        glm::mat4 placement(1.0F);
+        if (!document.hasSkeleton && instance.nodeIndex >= 0 &&
+            static_cast<std::size_t>(instance.nodeIndex) < staticWorldTransforms.size()) {
+            placement = staticWorldTransforms[static_cast<std::size_t>(instance.nodeIndex)];
+        }
+        for (const ModelVertex& vertex : document.meshes[instance.meshIndex].vertices) {
+            const glm::vec3 position = glm::vec3(placement * glm::vec4(vertex.position, 1.0F));
             if (!hasAnyVertex) {
-                boundsMin = vertex.position;
-                boundsMax = vertex.position;
+                boundsMin = position;
+                boundsMax = position;
                 hasAnyVertex = true;
             } else {
-                boundsMin = glm::min(boundsMin, vertex.position);
-                boundsMax = glm::max(boundsMax, vertex.position);
+                boundsMin = glm::min(boundsMin, position);
+                boundsMax = glm::max(boundsMax, position);
             }
         }
     }

@@ -129,7 +129,10 @@ void collectUniforms(const std::string& source, std::vector<UniformDefinition>& 
             if (bracketPosition != std::string::npos) {
                 name.erase(bracketPosition);
             }
-            if (name == "MVP" || name == "uCameraPos" || name == "model") {
+            // Engine-managed matrices are uploaded every frame by PreviewRenderer from the active
+            // camera, so they must never be discovered as user-editable uniforms (FR-012). Phoenix
+            // declares "view"/"projection" the same way it declares "model"/"MVP".
+            if (name == "MVP" || name == "uCameraPos" || name == "model" || name == "view" || name == "projection") {
                 continue;
             }
             UniformDefinition uniform = makeUniformDefinition(type, name);

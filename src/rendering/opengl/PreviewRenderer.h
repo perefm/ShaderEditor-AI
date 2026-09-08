@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "editor/ShaderPairDocument.h"
 #include "rendering/geometry/PrimitiveLibrary.h"
+#include "rendering/models/ModelCameraResolver.h"
 #include "rendering/models/ModelDocument.h"
 #include "rendering/models/SkeletalAnimator.h"
 #include "rendering/opengl/PreviewCamera.h"
@@ -47,6 +48,18 @@ class PreviewRenderer {
     // model has no animations), in the same order as ModelDocument::animations / RenderSession's
     // selectedAnimationIndex, so panels can populate an animation picker.
     [[nodiscard]] std::vector<std::string> activeModelAnimationNames() const;
+    // Names of every camera authored inside the active model (empty if no model is loaded or it
+    // has none), in ModelDocument::cameras order so an index matches RenderSession's
+    // activeCameraIndex, letting the Render panel populate a camera picker.
+    [[nodiscard]] std::vector<std::string> activeModelCameraNames() const;
+    // Number of cameras the active model carries; used to clamp a stale camera selection when a
+    // different model is loaded.
+    [[nodiscard]] std::size_t activeModelCameraCount() const {
+        return activeModel_ == nullptr ? 0U : activeModel_->cameras.size();
+    }
+    // Read-only access to the cached model so WorkspaceController can build a ModelInfoSummary
+    // without re-importing the file. Null when no model has been loaded.
+    [[nodiscard]] const ModelDocument* activeModel() const { return activeModel_.get(); }
     // Returns the cached model's bind-pose bounding radius so WorkspaceController can restore
     // model-proportional camera framing after temporarily switching to a primitive.
     [[nodiscard]] float activeModelBoundingRadius() const {
@@ -72,13 +85,22 @@ class PreviewRenderer {
 
     void destroyGpuResources();
     bool hasOpenGlContext() const;
+    // Resolves which camera this frame renders through: the model-authored camera selected in the
+    // session (static or keyframe-animated) when it is valid, otherwise the free preview camera.
+    // Every camera-derived uniform is then built from this one result so "view", "projection",
+    // "MVP" and "uCameraPos" can never describe different cameras (FR-017/FR-017a/FR-017b).
+    [[nodiscard]] ResolvedCamera resolveActiveCamera(const RenderSession& session) const;
     bool ensureProgram(const ShaderPairDocument& document, std::string& errorMessage);
     bool ensureFramebuffer(int width, int height, std::string& errorMessage);
     bool ensureMesh(const PreviewPrimitive& primitive, std::string& errorMessage);
     bool ensureModelGpuResources(std::string& errorMessage);
     void applyUniforms(GLuint program, const RenderSession& session, const std::vector<UniformDefinition>& uniforms);
     // Binds one imported mesh's textures/material colors/bone matrices and issues its draw call.
-    void renderModelMesh(const ModelMesh& mesh, const ModelMeshBuffers& buffers, GLuint program, const std::vector<glm::mat4>& boneTransforms);
+    static void uploadMeshTransforms(GLuint program, const ResolvedCamera& camera, const glm::mat4& modelMatrix);
+    // Binds one material's uniforms and textures. Called once per material group, not per mesh.
+    void bindMeshMaterial(ModelMaterial& material, GLuint program);
+    // Mesh indices ordered so that meshes sharing a material are drawn consecutively.
+    const std::vector<std::size_t>& materialSortedMeshOrder();
     void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height, const glm::vec4& clearColor);
     void beginModelFrame(GLuint program, int width, int height, const glm::vec4& clearColor);
     GLuint textureForPath(const std::filesystem::path& path);
@@ -90,6 +112,7 @@ class PreviewRenderer {
     GLuint uploadRgbaTexture(const unsigned char* pixels, int width, int height);
 
     PreviewCamera previewCamera_;
+    ModelCameraResolver modelCameraResolver_;
     PrimitiveLibrary library_;
     ShaderProgramService shaderProgramService_;
     SkeletalAnimator skeletalAnimator_;
@@ -109,6 +132,8 @@ class PreviewRenderer {
     // between "primitive" and "model" render targets never needs to re-upload either one.
     std::unique_ptr<ModelDocument> activeModel_;
     std::vector<ModelMeshBuffers> activeModelBuffers_;
+    // Draw order grouping meshes by material; rebuilt whenever a new model is set.
+    std::vector<std::size_t> materialSortedOrder_;
     bool activeModelGpuResourcesReady_ {false};
 };
 }  // namespace shadereditor

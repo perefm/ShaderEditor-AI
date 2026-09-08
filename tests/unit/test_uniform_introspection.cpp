@@ -80,3 +80,18 @@ TEST_CASE("uniform introspection excludes engine-owned MVP/uCameraPos/model unif
     REQUIRE(uniforms.size() == 1);
     REQUIRE(uniforms.front().name == "u_offset");
 }
+
+TEST_CASE("engine-managed matrices are never surfaced as editable uniforms") {
+    shadereditor::ShaderPairDocument document;
+    // Phoenix supplies view/projection/MVP/model/uCameraPos itself, so they must never reach the
+    // Uniforms panel even though they are declared in the shader (FR-027).
+    document.vertexSource =
+        "uniform mat4 view; uniform mat4 projection; uniform mat4 MVP; uniform mat4 model; "
+        "uniform vec3 uCameraPos; uniform float u_custom; void main(){}";
+
+    shadereditor::UniformIntrospectionService introspection;
+    const auto uniforms = introspection.discover(document);
+
+    REQUIRE(uniforms.size() == 1);
+    REQUIRE(uniforms.front().name == "u_custom");
+}

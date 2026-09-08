@@ -2,6 +2,7 @@
 
 #include "app/workspace/PlaybackClockState.h"
 #include "app/workspace/PreviewInteractionState.h"
+#include "rendering/models/SkeletalAnimator.h"
 #include "rendering/shaders/UniformDefinition.h"
 
 #include <glm/vec4.hpp>
@@ -85,6 +86,12 @@ struct RenderSession {
     // Index into the loaded model's ModelDocument::animations that SkeletalAnimator should play;
     // -1 (the default) means "no animation" (bind pose / static mesh). Ignored for primitives.
     int selectedAnimationIndex {-1};
+    // What happens once playback time passes the active clip's duration.
+    AnimationLoopMode animationLoopMode {AnimationLoopMode::Loop};
+    // Which camera the preview renders through, mirroring Phoenix's drawScene "CameraNumber":
+    // -1 (the default) is the free orbit/pan preview camera, >= 0 indexes ModelDocument::cameras.
+    // Any index that is not valid for the currently loaded model resolves back to the free camera.
+    int activeCameraIndex {-1};
     // Read-only snapshot of the playback clock so panels can display t/tend/bpm/beat/play-state
     // without reaching into WorkspaceController internals.
     PlaybackClockState playback;

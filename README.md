@@ -22,25 +22,37 @@ tool panels in a dockable Dear ImGui layout.
 - Editable runtime uniforms including `float`, `int`, `bool`, `vec2`, `vec3`,
   `vec4`, `mat2`, `mat3`, `mat4`, and `sampler2D`
 - Mouse-driven preview navigation
-  - Left drag: orbit the scene
-  - Right drag: pan the scene
+  - Left drag: orbit the free camera around the scene
+  - Right drag: pan the free camera
   - `Reset View`: restore the default framing
 - GLM-based math pipeline for preview transforms and uniform upload
 - Phoenix-compatible engine-provided shader uniforms and vertex attributes
 - Bundled model shader examples, including `bone_animation.glsl`,
   `bone_animation_material_only.glsl`, `bump_mapping.glsl`,
-  `bone_animation_bump_mapping.glsl`, and `pbr_animation.glsl`
+  `bone_animation_bump_mapping.glsl`, `material_pixel_lighting.glsl`, and
+  `pbr_animation.glsl`
 
 ### Engine-provided uniforms
 
 The preview engine supplies these Phoenix-compatible values automatically on
-every rendered frame or mesh draw. They must not be declared as editable
-uniforms in the `Uniforms` panel:
+every rendered frame or mesh draw. They are never discovered by uniform
+introspection, so they never appear in the `Uniforms` panel and cannot be
+edited there — declaring them in a shader is enough to receive them:
 
-- `uniform mat4 MVP`: model-view-projection matrix for the preview.
-- `uniform mat4 model`: orbit-only model matrix, useful for transforming normals
-  and tangents.
-- `uniform vec3 uCameraPos`: current camera position in preview world space.
+- `uniform mat4 view`: view matrix of the active camera (free camera or the
+  selected model camera), exactly as Phoenix supplies it.
+- `uniform mat4 projection`: projection matrix of the active camera.
+- `uniform mat4 MVP`: model-view-projection matrix for the preview. It is always
+  computed as `projection * view * model`, so the three matrices can never
+  disagree.
+- `uniform mat4 model`: model matrix of the mesh being drawn, as authored in the
+  model file, times its animated scene-node transform for node-keyframed
+  objects. Orbit and pan move the free camera rather than the model, so this
+  never contains preview navigation. Useful for transforming normals and
+  tangents into world space.
+- `uniform vec3 uCameraPos`: world-space position of the **active** camera. When
+  a model camera is selected it follows that camera, including its keyframe
+  animation, and is re-evaluated every frame.
 - `uniform float t`: elapsed playback time in seconds.
 - `uniform float tend`: configured playback section duration in seconds; it
   is always greater than `1.0` and reaching it resets `t` to `0.0`.
@@ -64,6 +76,16 @@ royalty-free Khronos CC0 sample with embedded normal maps. Use it with
 `bone_animation_bump_mapping.glsl` example combines the same normal mapping
 with Phoenix-compatible skinning and can also be used with animated models.
 
+The `material_pixel_lighting.glsl` example is the unskinned counterpart to
+`bone_animation_material_only.glsl`: it declares no `gBones` array and does no
+skinning at all, so it suits static models and models animated by node
+keyframes (whose movement already arrives through the per-mesh `model` matrix).
+It samples no textures — surfaces are shaded entirely from the imported
+material properties (`Mat_Ka`, `Mat_Kd`, `Mat_Ks`, `Mat_KsStrenght`) — and
+evaluates Blinn-Phong lighting per pixel in world space, using `uCameraPos` so
+highlights follow whichever camera is active. Note that applying it to a
+skinned model renders that model in its bind pose.
+
 Imported model vertex attributes follow the Phoenix mesh layout:
 `aPos` (0), `aNormal` (1), `aTexCoords` (2), `aTangent` (3),
 `aBiTangent` (4), `aBoneID` (5), and `aBoneWeight` (6). Built-in primitives
@@ -72,6 +94,67 @@ provide `aPos` and `aUv`.
 Declare and use these names in shader stages that need them. Other uniforms
 declared by the shader are discovered after a successful compile and remain
 editable from the `Uniforms` panel.
+
+### Keyframe animation and cameras
+
+Imported models expose their Assimp animation clips in the `Render` panel's
+`Animation` combo (`None` keeps the bind pose). The `Loop animation` checkbox
+selects whether the clip restarts when its duration elapses or holds its final
+keyframe.
+
+Two kinds of animation are supported and handled differently:
+
+- **Skeletal animation** is uploaded as `gBones[]`, exactly like Phoenix.
+- **Node (object) animation** — a mesh that moves without a skeleton — is folded
+  into that mesh's `model` matrix from its scene node's animated world
+  transform, so `model` and `MVP` are per-mesh for such models. Skinned models
+  are excluded from this, since `gBones` already bakes the node hierarchy in and
+  applying it twice would double-transform the vertices.
+
+The `Camera` combo selects which camera drives `view`, `projection` and
+`uCameraPos`:
+
+- `Free camera` (default) uses the interactive orbit/pan/zoom camera.
+- Any other entry binds a camera authored inside the model. If that camera's
+  node is keyframe-animated, the matrices and `uCameraPos` follow it every
+  frame. While a model camera is active, orbit/pan/zoom input is ignored so the
+  free camera's framing is preserved and restored untouched when you switch
+  back.
+
+Models without cameras show only `Free camera` plus a note saying the model has
+no cameras.
+
+`assets/models/KeyframeSamples/` contains two ready-to-use samples: a scene with
+keyframe-animated objects and a scene with a keyframe-animated camera. See its
+[README](assets/models/KeyframeSamples/README.md).
+
+Orbit, pan and zoom move the **free camera** only; they never modify object
+placement. Imported models always render at the transform authored in the file,
+so a scene camera shows exactly the framing its author intended regardless of
+how the free camera was moved beforehand.
+
+### Instanced scenes
+
+Model files frequently reference a single mesh from many scene nodes — either
+because the scene reuses props, or because Assimp's `aiProcess_FindInstances`
+merged identical meshes during import. ShaderEditor draws one instance per
+`(mesh, node)` reference, so every copy appears at its own node transform. A
+city scene made of repeated props may therefore issue several thousand draws
+from only a few hundred distinct meshes.
+
+To keep such scenes interactive, the renderer evaluates the node hierarchy once
+per frame (not once per mesh), deduplicates materials at import time, and draws
+meshes grouped by material so material uniforms and textures are bound once per
+distinct material instead of once per mesh.
+
+### Model info panel
+
+`View > Model info` opens a read-only panel describing the currently loaded
+model: name and source path, mesh/vertex/triangle/index/material counts, texture
+slots by type and embedded-image count, skeleton and bone counts, every
+animation clip with its duration and channel count, the model's cameras and
+whether each is animated, and the bounding box and radius. The panel refreshes
+automatically each time a model is loaded.
 
 ## Project Layout
 

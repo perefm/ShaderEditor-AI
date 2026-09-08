@@ -4,6 +4,7 @@ target_include_directories(Catch2WithMain PUBLIC ${PROJECT_SOURCE_DIR}/third_par
 add_executable(shader_editor_tests
     unit/test_assimp_model_loader.cpp
     unit/test_example_shaders.cpp
+    unit/test_model_info.cpp
     unit/test_playback_clock.cpp
     unit/test_preview_camera.cpp
     unit/test_render_session.cpp
