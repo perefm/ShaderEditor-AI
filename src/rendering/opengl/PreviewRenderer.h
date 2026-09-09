@@ -99,8 +99,12 @@ class PreviewRenderer {
     static void uploadMeshTransforms(GLuint program, const ResolvedCamera& camera, const glm::mat4& modelMatrix);
     // Binds one material's uniforms and textures. Called once per material group, not per mesh.
     void bindMeshMaterial(ModelMaterial& material, GLuint program);
-    // Mesh indices ordered so that meshes sharing a material are drawn consecutively.
+    // Mesh indices ordered so that meshes sharing a material are drawn consecutively, with every
+    // opaque instance before every transparent one (see materialSortedMeshOrder's definition).
     const std::vector<std::size_t>& materialSortedMeshOrder();
+    // True when the material is translucent enough to need blending (KHR_materials_transmission
+    // and/or sub-1.0 opacity), used to split the draw order into an opaque then transparent pass.
+    static bool isMaterialTransparent(const ModelMaterial& material);
     void renderPrimitive(const PreviewPrimitive& primitive, GLuint program, int width, int height, const glm::vec4& clearColor);
     void beginModelFrame(GLuint program, int width, int height, const glm::vec4& clearColor);
     GLuint textureForPath(const std::filesystem::path& path);

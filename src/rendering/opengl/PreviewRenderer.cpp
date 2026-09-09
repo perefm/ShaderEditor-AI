@@ -168,13 +168,23 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
 
         // Draw meshes grouped by material so identical material uniforms and textures are bound
         // once per material instead of once per mesh. Entries are instances, not meshes: a mesh
-        // referenced by many nodes must be drawn once per placement.
+        // referenced by many nodes must be drawn once per placement. materialSortedMeshOrder()
+        // guarantees every opaque instance precedes every transparent one, so depth writes are
+        // disabled exactly once, the first time a transparent material is encountered - opaque
+        // geometry is fully in the depth buffer by then, so glass correctly blends over/behind it
+        // instead of over the (still just clear-colored) framebuffer.
         const std::vector<std::size_t>& drawOrder = materialSortedMeshOrder();
         int boundMaterial = -1;
         GLuint boundVao = 0;
+        bool inTransparentPass = false;
         for (const std::size_t instanceIndex : drawOrder) {
             const ModelMeshInstance& instance = activeModel_->meshInstances[instanceIndex];
             ModelMesh& mesh = activeModel_->meshes[instance.meshIndex];
+
+            if (!inTransparentPass && isMaterialTransparent(mesh.material)) {
+                inTransparentPass = true;
+                glDepthMask(GL_FALSE);
+            }
 
             // Node-level keyframe animation (an object that moves without a skeleton) lives in the
             // mesh's scene-node transform, so it must be folded into the model matrix per instance.
@@ -202,6 +212,8 @@ RenderSession PreviewRenderer::renderFrame(const ShaderPairDocument& document,
 
         glBindVertexArray(0);
         glUseProgram(0);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         session.previewTextureId = colorTexture_;
@@ -757,6 +769,12 @@ void PreviewRenderer::beginModelFrame(GLuint program, int width, int height, con
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
     glViewport(0, 0, width, height);
     glEnable(GL_DEPTH_TEST);
+    // Imported glTF materials can be genuinely translucent (KHR_materials_transmission glass,
+    // alpha-blended paint, etc. - see ModelMaterial::transmissionFactor/opacity), so blending is
+    // enabled for the whole model draw. Fully opaque materials output alpha = 1 and are
+    // unaffected by this (src-alpha/one-minus-src-alpha blending is a no-op at alpha = 1).
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(program);
@@ -809,6 +827,48 @@ void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) 
         glUniform1f(specularStrengthLocation, material.specularStrength);
     }
 
+    // Upload glTF's metallic-roughness workflow values for assets/shaders/pbr_animation.glsl.
+    // These come straight from the imported material (AI_MATKEY_METALLIC_FACTOR/ROUGHNESS_FACTOR
+    // and whether dedicated metalness/roughness textures were found), overriding whatever the
+    // user may have set in the Uniforms panel for these names so imported PBR materials render
+    // with their authored values rather than the shader's generic 1.0/false defaults.
+    const GLint metallicFactorLocation = glGetUniformLocation(program, "metallicFactor");
+    if (metallicFactorLocation >= 0) {
+        glUniform1f(metallicFactorLocation, material.metallicFactor);
+    }
+    const GLint roughnessFactorLocation = glGetUniformLocation(program, "roughnessFactor");
+    if (roughnessFactorLocation >= 0) {
+        glUniform1f(roughnessFactorLocation, material.roughnessFactor);
+    }
+    const GLint hasPbrTexturesLocation = glGetUniformLocation(program, "hasPbrTextures");
+    if (hasPbrTexturesLocation >= 0) {
+        glUniform1i(hasPbrTexturesLocation, material.hasPbrTextures ? 1 : 0);
+    }
+    const GLint hasDiffuseTextureLocation = glGetUniformLocation(program, "hasDiffuseTexture");
+    if (hasDiffuseTextureLocation >= 0) {
+        glUniform1i(hasDiffuseTextureLocation, material.hasDiffuseTexture ? 1 : 0);
+    }
+    const GLint transmissionFactorLocation = glGetUniformLocation(program, "transmissionFactor");
+    if (transmissionFactorLocation >= 0) {
+        glUniform1f(transmissionFactorLocation, material.transmissionFactor);
+    }
+    const GLint materialOpacityLocation = glGetUniformLocation(program, "materialOpacity");
+    if (materialOpacityLocation >= 0) {
+        glUniform1f(materialOpacityLocation, material.opacity);
+    }
+    const GLint hasNormalMapLocation = glGetUniformLocation(program, "hasNormalMap");
+    if (hasNormalMapLocation >= 0) {
+        glUniform1i(hasNormalMapLocation, material.hasNormalMap ? 1 : 0);
+    }
+    const GLint hasEmissiveTextureLocation = glGetUniformLocation(program, "hasEmissiveTexture");
+    if (hasEmissiveTextureLocation >= 0) {
+        glUniform1i(hasEmissiveTextureLocation, material.hasEmissiveTexture ? 1 : 0);
+    }
+    const GLint emissiveFactorLocation = glGetUniformLocation(program, "emissiveFactor");
+    if (emissiveFactorLocation >= 0) {
+        glUniform3fv(emissiveFactorLocation, 1, glm::value_ptr(material.emissiveFactor));
+    }
+
     // Bind every texture slot the material carries, using the exact Phoenix uniform name
     // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015). Textures
     // may either live on disk (sourcePath) or be embedded directly in the model file (glTF/.glb),
@@ -838,6 +898,14 @@ void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) 
     }
 }
 
+bool PreviewRenderer::isMaterialTransparent(const ModelMaterial& material) {
+    // Mirrors the alpha computed in pbr_animation.glsl's fragment shader
+    // (min(materialOpacity, 1 - transmissionFactor)): anything below fully opaque needs blending
+    // and must be drawn after - not intermixed with - the opaque geometry.
+    const float alpha = std::min(material.opacity, 1.0F - material.transmissionFactor);
+    return alpha < 0.999F;
+}
+
 const std::vector<std::size_t>& PreviewRenderer::materialSortedMeshOrder() {
     // Computed once per loaded model, not per frame: the material assignment is fixed for the
     // lifetime of the document, so the draw order never changes. Entries index meshInstances, so
@@ -848,11 +916,23 @@ const std::vector<std::size_t>& PreviewRenderer::materialSortedMeshOrder() {
     materialSortedOrder_.resize(activeModel_->meshInstances.size());
     std::iota(materialSortedOrder_.begin(), materialSortedOrder_.end(), std::size_t {0});
     // Stable sort keeps the model's authored order within a material group, so draw order stays
-    // deterministic (important for meshes that rely on back-to-front blending order).
+    // deterministic (important for meshes that rely on back-to-front blending order). Translucent
+    // materials (glass, etc.) are sorted after every opaque one so the opaque pass below can
+    // render the whole opaque scene into the depth buffer BEFORE any blended surface samples it -
+    // otherwise a windshield drawn before the (still-empty) framebuffer behind it would end up
+    // blended against the clear color instead of the dashboard/seats, and its depth write would
+    // then incorrectly occlude those opaque meshes once they were finally drawn.
     std::stable_sort(materialSortedOrder_.begin(), materialSortedOrder_.end(),
                      [this](std::size_t lhs, std::size_t rhs) {
                          const auto& meshes = activeModel_->meshes;
                          const auto& instances = activeModel_->meshInstances;
+                         const ModelMaterial& lhsMaterial = meshes[instances[lhs].meshIndex].material;
+                         const ModelMaterial& rhsMaterial = meshes[instances[rhs].meshIndex].material;
+                         const bool lhsTransparent = isMaterialTransparent(lhsMaterial);
+                         const bool rhsTransparent = isMaterialTransparent(rhsMaterial);
+                         if (lhsTransparent != rhsTransparent) {
+                             return rhsTransparent;  // opaque (false) sorts before transparent (true)
+                         }
                          return meshes[instances[lhs].meshIndex].materialIndex <
                                 meshes[instances[rhs].meshIndex].materialIndex;
                      });

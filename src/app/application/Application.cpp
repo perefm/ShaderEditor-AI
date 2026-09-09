@@ -1,5 +1,7 @@
 #include "app/application/Application.h"
 
+#include <shadereditor_version.h>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/common.hpp>

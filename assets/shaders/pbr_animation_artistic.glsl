@@ -1,8 +1,8 @@
 #type vertex
 #version 460 core
 
-// Same Phoenix-style skinned vertex layout as assets/shaders/bone_animation.glsl,
-// combined here with a PBR (metallic-roughness) fragment stage.
+// Same Phoenix-style skinned vertex layout as assets/shaders/pbr_animation.glsl; the artistic
+// variant only changes the fragment stage, so the vertex stage is copied unmodified.
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoords;
@@ -48,6 +48,20 @@ void main() {
 #type fragment
 #version 460 core
 
+// Artistic variant of assets/shaders/pbr_animation.glsl: physically-based as a starting point,
+// but with a handful of user-editable "art direction" controls layered on top of the imported
+// material's authored values, so a shader author can push the look away from strict physical
+// accuracy (e.g. exaggerate roughness variation, force extra shininess, brighten/darken the
+// base color, or fade transparency) without hand-editing the material or re-exporting the model.
+//
+// Everything named exactly like assets/shaders/pbr_animation.glsl's uniforms (metallicFactor,
+// roughnessFactor, hasPbrTextures, hasDiffuseTexture, transmissionFactor, materialOpacity,
+// Mat_Kd) is still recognized by UniformIntrospectionService::isPhoenixAutoUniform and therefore
+// still auto-supplied per-mesh from the imported material and hidden as read-only - exactly as
+// in the non-artistic shader. The new "art*" uniforms below are ordinary, user-editable uniforms
+// (they are intentionally NOT in that auto-uniform allow-list) that the Uniforms panel exposes
+// as regular sliders/checkboxes on top of that baseline.
+
 out vec4 FragColor;
 
 in vec2 vUv;
@@ -62,13 +76,8 @@ in vec3 vWorldPos;
 uniform sampler2D texture_diffuse1;
 uniform sampler2D texture_metalness1;
 uniform sampler2D texture_roughness1;
-// glTF normalTexture (tangent-space normal map). Applied via the TBN basis built from the
-// interpolated vertex tangent/bitangent/normal; falls back to the plain vertex normal when no
-// normal map is bound (hasNormalMap is false).
 uniform sampler2D texture_normal1;
 uniform bool hasNormalMap = false;
-// glTF emissiveTexture, combined (multiplied) with emissiveFactor below for self-illumination
-// that doesn't depend on scene lighting (e.g. brake lights, headlights, glowing panels).
 uniform sampler2D texture_emissive1;
 uniform bool hasEmissiveTexture = false;
 uniform vec3 emissiveFactor = vec3(0.0);
@@ -91,6 +100,35 @@ uniform float materialOpacity = 1.0;
 uniform vec3 lightPosition = vec3(3.0, 4.0, 5.0);
 uniform vec3 lightColor = vec3(1.0, 1.0, 1.0);
 uniform vec3 uCameraPos = vec3(0.0, 0.0, 4.0);
+
+// --- Artistic controls (user-editable; NOT auto-supplied from the imported material) ---
+// Multiplies the material's metallic value; 1.0 = unchanged, >1.0 = more metallic-looking,
+// 0.0 = force fully dielectric regardless of the imported/textured value.
+uniform float artMetallicBoost = 1.0;
+// Multiplies the material's roughness value; <1.0 sharpens highlights (more polished/wet
+// looking), >1.0 exaggerates a matte/rough look. Applied before the 0.05 physical floor clamp.
+uniform float artRoughnessBoost = 1.0;
+// Flat additive bias applied after the roughness boost, so a user can push a texture-driven
+// roughness map uniformly rougher/smoother without fighting its existing per-pixel variation.
+uniform float artRoughnessBias = 0.0;
+// Multiplies the final specular (Cook-Torrance) contribution; >1.0 gives punchier, more
+// stylized highlights than the physically-correct energy the base model produces.
+uniform float artSpecularIntensity = 1.0;
+// Tints albedo by this color (multiplicative) before lighting, for quick color-grading without
+// touching the imported material's baseColorFactor/texture.
+uniform vec3 artAlbedoTint = vec3(1.0);
+// Extra constant ambient/fill light added on top of the base model's small 0.03 ambient term,
+// useful for keeping shadowed areas readable in a stylized (non-physically-lit) preview.
+uniform float artAmbientBoost = 0.0;
+// Multiplies the computed alpha (transmission/opacity); lets a user fade glass further (or make
+// it fully opaque for inspection) without editing the source material.
+uniform float artOpacityMultiplier = 1.0;
+// Scales the tangent-space normal map's XY (bump) components before renormalizing; 0.0 flattens
+// the surface back to the plain vertex normal, >1.0 exaggerates surface detail.
+uniform float artNormalStrength = 1.0;
+// Multiplies the material's emissive contribution; useful for pushing glow-y parts (headlights,
+// screens) beyond their authored intensity for a more stylized look.
+uniform float artEmissiveBoost = 1.0;
 
 const float kPi = 3.14159265359;
 
@@ -117,21 +155,27 @@ vec3 fresnelSchlick(float cosTheta, vec3 f0) {
 
 void main() {
     vec3 albedo = hasDiffuseTexture ? texture(texture_diffuse1, vUv).rgb : Mat_Kd;
+    albedo *= artAlbedoTint;
+
     // glTF packs the combined metallic-roughness (and often occlusion) texture with roughness in
     // the green channel and metalness in the blue channel; Assimp hands back the same source
     // image for both texture_metalness1 and texture_roughness1 (it does not split channels), so
     // each slot must be sampled from its own channel here rather than both reading .r (which is
-    // occlusion, not metal/roughness, and was why every material looked equally flat before).
+    // occlusion, not metal/roughness).
     float metallic = hasPbrTextures ? texture(texture_metalness1, vUv).b : metallicFactor;
     float roughness = hasPbrTextures ? texture(texture_roughness1, vUv).g : roughnessFactor;
-    roughness = clamp(roughness, 0.05, 1.0);
+
+    // Artistic overrides applied on top of the physically-authored values, then re-clamped to
+    // valid ranges (the 0.05 floor keeps the GGX/Fresnel terms below from producing a divide-by-
+    // near-zero specular hotspot at roughness 0).
+    metallic = clamp(metallic * artMetallicBoost, 0.0, 1.0);
+    roughness = clamp(roughness * artRoughnessBoost + artRoughnessBias, 0.05, 1.0);
 
     vec3 normal = normalize(vNormal);
     if (hasNormalMap) {
-        // Standard tangent-space normal mapping: sample, unpack from [0,1] to [-1,1], then
-        // rotate into world space via the TBN basis built from the interpolated vertex vectors.
         mat3 tbn = mat3(normalize(vTangent), normalize(vBiTangent), normal);
         vec3 tangentNormal = texture(texture_normal1, vUv).rgb * 2.0 - 1.0;
+        tangentNormal.xy *= artNormalStrength;
         normal = normalize(tbn * tangentNormal);
     }
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
@@ -147,25 +191,25 @@ void main() {
     vec3 fresnel = fresnelSchlick(max(dot(halfway, viewDir), 0.0), f0);
 
     vec3 specular = (distribution * geometry * fresnel) / (4.0 * nDotV * nDotL + 0.0001);
+    specular *= artSpecularIntensity;
     vec3 kd = (vec3(1.0) - fresnel) * (1.0 - metallic);
     vec3 diffuse = kd * albedo / kPi;
 
     vec3 radiance = lightColor * nDotL;
     vec3 color = (diffuse + specular) * radiance;
-    color += albedo * 0.03; // small constant ambient term so unlit areas aren't pure black
+    // Base ambient term (matches pbr_animation.glsl) plus an artist-controlled extra fill light.
+    color += albedo * (0.03 + artAmbientBoost);
 
-    // Self-illumination (e.g. brake lights/headlights) that doesn't depend on scene lighting;
-    // added after the lit term, before tone mapping, so it isn't crushed by Reinhard the same
-    // way an equivalent boost to the light-dependent color would be.
     vec3 emissive = hasEmissiveTexture ? texture(texture_emissive1, vUv).rgb * emissiveFactor : emissiveFactor;
-    color += emissive;
+    color += emissive * artEmissiveBoost;
 
     // Reinhard tone mapping + gamma correction for display.
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
     // Transmission (glass) and opacity (alpha) are independent ways glTF marks a material
-    // translucent; take whichever leaves less of the surface opaque.
-    float alpha = min(materialOpacity, 1.0 - transmissionFactor);
+    // translucent; take whichever leaves less of the surface opaque, then apply the artistic
+    // opacity multiplier on top.
+    float alpha = clamp(min(materialOpacity, 1.0 - transmissionFactor) * artOpacityMultiplier, 0.0, 1.0);
     FragColor = vec4(color, alpha);
 }

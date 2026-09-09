@@ -29,8 +29,8 @@ tool panels in a dockable Dear ImGui layout.
 - Phoenix-compatible engine-provided shader uniforms and vertex attributes
 - Bundled model shader examples, including `bone_animation.glsl`,
   `bone_animation_material_only.glsl`, `bump_mapping.glsl`,
-  `bone_animation_bump_mapping.glsl`, `material_pixel_lighting.glsl`, and
-  `pbr_animation.glsl`
+  `bone_animation_bump_mapping.glsl`, `material_pixel_lighting.glsl`,
+  `pbr_animation.glsl`, and `pbr_animation_artistic.glsl`
 
 ### Engine-provided uniforms
 
@@ -67,24 +67,26 @@ edited there — declaring them in a shader is enough to receive them:
 - `uniform float Mat_KsStrenght`: active mesh specular strength.
 - `uniform mat4 gBones[100]`: active skeletal animation bone transforms.
 - `texture_*` sampler uniforms such as `texture_diffuse1`,
-  `texture_specular1`, `texture_normals1`, and `texture_height1`: active mesh
-  texture slots, loaded from external files or embedded model images.
+  `texture_specular1`, `texture_normal1`, `texture_emissive1`,
+  `texture_metalness1`, `texture_roughness1`, and `texture_height1`: active
+  mesh texture slots, loaded from external files or embedded model images.
+- `uniform float metallicFactor`, `roughnessFactor`, `transmissionFactor`,
+  `materialOpacity`: active mesh glTF metallic-roughness/transmission factors
+  (`pbr_animation*.glsl`).
+- `uniform bool hasPbrTextures`, `hasDiffuseTexture`, `hasNormalMap`,
+  `hasEmissiveTexture`: whether the active mesh has a dedicated
+  metallic-roughness, base color, normal, or emissive texture bound, so a
+  shader can fall back to the scalar factors/colors above when it does not.
+- `uniform vec3 emissiveFactor`: active mesh glTF emissive color
+  (`pbr_animation*.glsl`).
 
 The bundled `assets/models/NormalTangentTest/NormalTangentTest.glb` is a
 royalty-free Khronos CC0 sample with embedded normal maps. Use it with
 `bump_mapping.glsl` to validate tangent-space bump mapping. The
 `bone_animation_bump_mapping.glsl` example combines the same normal mapping
 with Phoenix-compatible skinning and can also be used with animated models.
-
-The `material_pixel_lighting.glsl` example is the unskinned counterpart to
-`bone_animation_material_only.glsl`: it declares no `gBones` array and does no
-skinning at all, so it suits static models and models animated by node
-keyframes (whose movement already arrives through the per-mesh `model` matrix).
-It samples no textures — surfaces are shaded entirely from the imported
-material properties (`Mat_Ka`, `Mat_Kd`, `Mat_Ks`, `Mat_KsStrenght`) — and
-evaluates Blinn-Phong lighting per pixel in world space, using `uCameraPos` so
-highlights follow whichever camera is active. Note that applying it to a
-skinned model renders that model in its bind pose.
+See "Bundled shaders" below for a description of every shader shipped with
+the project.
 
 Imported model vertex attributes follow the Phoenix mesh layout:
 `aPos` (0), `aNormal` (1), `aTexCoords` (2), `aTangent` (3),
@@ -94,6 +96,67 @@ provide `aPos` and `aUv`.
 Declare and use these names in shader stages that need them. Other uniforms
 declared by the shader are discovered after a successful compile and remain
 editable from the `Uniforms` panel.
+
+### Bundled shaders
+
+All bundled shaders live in `assets/shaders/`. Each is a single `.glsl` file
+with a `#type vertex` and `#type fragment` section.
+
+**Primitive-only examples** (built-in plane/cube/torus/sphere/cylinder,
+`aPos`/`aUv` vertex layout only):
+
+- `basic.glsl` — flat-shaded solid color from a single `uniform vec3 color`;
+  the minimal starting point for a new shader.
+- `uniforms.glsl` — demonstrates editable `float`/`vec4` uniforms
+  (`intensity`, `tint`) with no lighting.
+- `diagnostics.glsl` — outputs solid white; useful for isolating whether a
+  problem is in geometry/transform setup or in shading.
+- `textured.glsl` — samples a single `sampler2D imageTexture` and outputs it
+  unlit.
+- `pixel_lighting.glsl` — per-pixel ambient + diffuse + specular lighting
+  using a face normal derived from screen-space derivatives (`dFdx`/`dFdy`),
+  so it works on primitives that carry no vertex normal attribute.
+
+**Imported-model examples** (Phoenix mesh vertex layout: `aPos`, `aNormal`,
+`aTexCoords`, `aTangent`, `aBiTangent`, `aBoneID`, `aBoneWeight`):
+
+- `bone_animation.glsl` — Phoenix-compatible skeletal (bone) animation with
+  Blinn-Phong lighting and a diffuse texture; the general-purpose default for
+  animated imported models.
+- `bone_animation_material_only.glsl` — same skinning as `bone_animation.glsl`
+  but samples no textures at all; shading comes entirely from the imported
+  material's `Mat_Ka`/`Mat_Kd`/`Mat_Ks`/`Mat_KsStrenght` colors. Useful for
+  animated models with no usable texture files.
+- `bump_mapping.glsl` — static (unskinned) tangent-space normal mapping plus
+  Blinn-Phong lighting; validate with
+  `assets/models/NormalTangentTest/NormalTangentTest.glb`.
+- `bone_animation_bump_mapping.glsl` — combines the same tangent-space normal
+  mapping with Phoenix-compatible skinning, for animated models with normal
+  maps.
+- `material_pixel_lighting.glsl` — unskinned counterpart to
+  `bone_animation_material_only.glsl`: no `gBones` skinning path (suits
+  static models and models animated by node keyframes), no texture sampling,
+  Blinn-Phong lighting evaluated per pixel in world space from the imported
+  material colors alone. Applying it to a skinned model renders that model in
+  its bind pose.
+- `pbr_animation.glsl` — physically-based (Cook-Torrance metallic-roughness)
+  skinned shader for glTF-style imports. Reads the imported material's base
+  color/metallic/roughness/transmission/opacity/normal/emissive values
+  (falling back to scalar factors when a mesh has no dedicated texture for
+  one of them) and blends translucent materials (e.g. glass) correctly
+  against the rest of the scene. All of its material-driven uniforms are
+  engine-supplied and read-only in the `Uniforms` panel — this shader is a
+  physically-accurate reference/baseline, not meant to be hand-tuned per
+  material.
+- `pbr_animation_artistic.glsl` — same physically-based baseline as
+  `pbr_animation.glsl`, plus extra ordinary (user-editable) "art direction"
+  uniforms layered on top: `artMetallicBoost`, `artRoughnessBoost`,
+  `artRoughnessBias`, `artSpecularIntensity`, `artAlbedoTint`,
+  `artAmbientBoost`, `artOpacityMultiplier`, `artNormalStrength`, and
+  `artEmissiveBoost`. Use this variant to push a model's look for stylistic
+  reasons without hand-editing the source material; at every control's
+  neutral default (1.0/0.0/white) the render is identical to
+  `pbr_animation.glsl`.
 
 ### Keyframe animation and cameras
 

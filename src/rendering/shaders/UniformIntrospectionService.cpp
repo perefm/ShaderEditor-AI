@@ -29,6 +29,28 @@ bool isPhoenixAutoUniform(const std::string& name, const std::string& type) {
     if (name == "Mat_KsStrenght" && type == "float") {
         return true;
     }
+    // glTF metallic-roughness/transmission material properties (see AssimpModelLoader/
+    // PreviewRenderer::bindMeshMaterial): these are supplied per-mesh from the imported
+    // material's actual authored values, exactly like Mat_Ka/Mat_Kd/Mat_Ks above, so they must
+    // be recognized here too - otherwise the Uniforms panel renders them as ordinary editable
+    // sliders whose value bindMeshMaterial() silently overwrites every frame, making the sliders
+    // appear completely unresponsive.
+    if ((name == "metallicFactor" || name == "roughnessFactor" || name == "transmissionFactor" ||
+         name == "materialOpacity") && type == "float") {
+        return true;
+    }
+    if ((name == "hasPbrTextures" || name == "hasDiffuseTexture") && type == "bool") {
+        return true;
+    }
+    // glTF normal/emissive material properties (see AssimpModelLoader/
+    // PreviewRenderer::bindMeshMaterial): auto-supplied per-mesh exactly like the PBR fields
+    // above.
+    if ((name == "hasNormalMap" || name == "hasEmissiveTexture") && type == "bool") {
+        return true;
+    }
+    if (name == "emissiveFactor" && type == "vec3") {
+        return true;
+    }
     // "gBones" is always an array (e.g. "uniform mat4 gBones[100];"); the simple tokenizer below
     // strips the "[...]" suffix from the name before this check runs, so only the type matters here.
     if (name == "gBones" && type == "mat4") {

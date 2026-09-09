@@ -33,6 +33,10 @@ glm::quat toGlmQuat(const aiQuaternion& q) { return {q.w, q.x, q.y, q.z}; }
 const char* phoenixTextureTypeName(aiTextureType type) {
     switch (type) {
         case aiTextureType_DIFFUSE: return "diffuse";
+        // glTF's baseColorTexture (the PBR albedo map) is imported by Assimp under this
+        // dedicated type rather than aiTextureType_DIFFUSE; Phoenix's pbr_animation.glsl still
+        // expects it in "texture_diffuse1", so it is named the same as legacy diffuse here.
+        case aiTextureType_BASE_COLOR: return "diffuse";
         case aiTextureType_SPECULAR: return "specular";
         case aiTextureType_AMBIENT: return "ambient";
         case aiTextureType_HEIGHT: return "height";
@@ -42,14 +46,20 @@ const char* phoenixTextureTypeName(aiTextureType type) {
         case aiTextureType_AMBIENT_OCCLUSION: return "ambientoclussion";
         case aiTextureType_METALNESS: return "metalness";
         case aiTextureType_DIFFUSE_ROUGHNESS: return "roughness";
+        // Newer Assimp versions (used by this project's vcpkg) expose glTF's packed
+        // metallicRoughnessTexture only under this dedicated type instead of METALNESS/
+        // DIFFUSE_ROUGHNESS, so it never matched either legacy slot and roughness/metalness
+        // textures were silently skipped. It is handled specially below (mapped to BOTH
+        // "metalness" and "roughness" shader uniform names) instead of appearing in this switch.
         case aiTextureType_UNKNOWN: return "unknown";
         default: return "none";
     }
 }
 
 // All aiTextureType values Phoenix binds textures for, in the same order Phoenix iterates them.
-constexpr std::array<aiTextureType, 11> kPhoenixTextureTypes {
+constexpr std::array<aiTextureType, 13> kPhoenixTextureTypes {
     aiTextureType_DIFFUSE,
+    aiTextureType_BASE_COLOR,
     aiTextureType_SPECULAR,
     aiTextureType_AMBIENT,
     aiTextureType_HEIGHT,
@@ -60,6 +70,7 @@ constexpr std::array<aiTextureType, 11> kPhoenixTextureTypes {
     aiTextureType_METALNESS,
     aiTextureType_DIFFUSE_ROUGHNESS,
     aiTextureType_UNKNOWN,
+    aiTextureType_GLTF_METALLIC_ROUGHNESS,
 };
 
 // Resolves a texture path referenced by a material relative to the model's own folder, since
@@ -177,6 +188,32 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
         result.material.colorSpecular = {specular.r, specular.g, specular.b};
         result.material.specularStrength = specularStrength;
 
+        // glTF metallic-roughness factors (defaulted to fully metallic/rough per the Assimp/
+        // glTF spec default when a material omits them); pbr_animation.glsl falls back to these
+        // scalars whenever no dedicated metalness/roughness texture is bound below.
+        float metallicFactor = 1.0F;
+        float roughnessFactor = 1.0F;
+        material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor);
+        material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor);
+        result.material.metallicFactor = metallicFactor;
+        result.material.roughnessFactor = roughnessFactor;
+
+        // glTF transparency: KHR_materials_transmission (glass-like see-through, e.g. this car's
+        // windshield) and the base alpha/opacity channel are independent ways a material can be
+        // translucent; the renderer blends using whichever produces the lower alpha.
+        float transmissionFactor = 0.0F;
+        float opacity = 1.0F;
+        material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmissionFactor);
+        material->Get(AI_MATKEY_OPACITY, opacity);
+        result.material.transmissionFactor = transmissionFactor;
+        result.material.opacity = opacity;
+
+        // glTF emissive color (self-illumination independent of scene lighting, e.g. brake
+        // lights/headlights); defaults to black (no emission) when the material doesn't author one.
+        aiColor3D emissive(0.0F, 0.0F, 0.0F);
+        material->Get(AI_MATKEY_COLOR_EMISSIVE, emissive);
+        result.material.emissiveFactor = {emissive.r, emissive.g, emissive.b};
+
         for (const aiTextureType textureType : kPhoenixTextureTypes) {
             const unsigned int textureCount = material->GetTextureCount(textureType);
             for (unsigned int textureIndexWithinType = 0; textureIndexWithinType < textureCount; ++textureIndexWithinType) {
@@ -203,6 +240,32 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
                     // the slot is still added so the uniform exists, just without pixel data.
                 } else {
                     slot.sourcePath = resolveTexturePath(texturePath, modelDirectory);
+                }
+                if (textureType == aiTextureType_METALNESS || textureType == aiTextureType_DIFFUSE_ROUGHNESS) {
+                    result.material.hasPbrTextures = true;
+                }
+                if (textureType == aiTextureType_DIFFUSE || textureType == aiTextureType_BASE_COLOR) {
+                    result.material.hasDiffuseTexture = true;
+                }
+                if (textureType == aiTextureType_NORMALS) {
+                    result.material.hasNormalMap = true;
+                }
+                if (textureType == aiTextureType_EMISSIVE) {
+                    result.material.hasEmissiveTexture = true;
+                }
+                if (textureType == aiTextureType_GLTF_METALLIC_ROUGHNESS) {
+                    // This Assimp version exposes glTF's single packed metallicRoughnessTexture
+                    // only under this dedicated type (not METALNESS/DIFFUSE_ROUGHNESS), so it
+                    // must be bound to BOTH Phoenix uniform names the pbr_animation.glsl shader
+                    // samples ("texture_metalness1" reads .b, "texture_roughness1" reads .g from
+                    // the very same image - see GltfMaterial.h's channel documentation).
+                    ModelTextureSlot roughnessSlot = slot;
+                    slot.shaderUniformName = "texture_metalness1";
+                    roughnessSlot.shaderUniformName = "texture_roughness1";
+                    result.material.hasPbrTextures = true;
+                    result.material.textureSlots.push_back(std::move(slot));
+                    result.material.textureSlots.push_back(std::move(roughnessSlot));
+                    continue;
                 }
                 result.material.textureSlots.push_back(std::move(slot));
             }
@@ -311,7 +374,12 @@ void assignMeshNodes(const aiNode* node, ModelDocument& document, const std::uno
 // single set of material-uniform uploads and texture binds.
 bool materialsEqual(const ModelMaterial& a, const ModelMaterial& b) {
     if (a.colorAmbient != b.colorAmbient || a.colorDiffuse != b.colorDiffuse || a.colorSpecular != b.colorSpecular ||
-        a.specularStrength != b.specularStrength || a.textureSlots.size() != b.textureSlots.size()) {
+        a.specularStrength != b.specularStrength || a.metallicFactor != b.metallicFactor ||
+        a.roughnessFactor != b.roughnessFactor || a.hasPbrTextures != b.hasPbrTextures ||
+        a.hasDiffuseTexture != b.hasDiffuseTexture || a.transmissionFactor != b.transmissionFactor ||
+        a.opacity != b.opacity || a.hasNormalMap != b.hasNormalMap ||
+        a.hasEmissiveTexture != b.hasEmissiveTexture || a.emissiveFactor != b.emissiveFactor ||
+        a.textureSlots.size() != b.textureSlots.size()) {
         return false;
     }
     for (std::size_t i = 0; i < a.textureSlots.size(); ++i) {

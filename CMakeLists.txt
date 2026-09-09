@@ -21,6 +21,10 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build project libraries as static librarie
 # redistributable, not a fully static CRT.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
+# Placeholder for the very first configure; the real value used by the build is (re)generated
+# on every build via the shader_editor_version_header custom target below, since CMake's own
+# string(TIMESTAMP ...) call here is only re-evaluated when the project is reconfigured, not on
+# every `cmake --build`, and would otherwise freeze the window title at the last configure time.
 string(TIMESTAMP SHADEREDITOR_VERSION_TIMESTAMP "%Y.%m.%d-%H:%M")
 
 enable_testing()
@@ -50,6 +54,20 @@ find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_path(STB_IMAGE_INCLUDE_DIR stb_image.h REQUIRED)
+
+# Regenerates a small header with the current timestamp on every build (see
+# cmake/GenerateVersionHeader.cmake for why this must run at build time rather than via
+# string(TIMESTAMP ...) directly in this file, which is only re-evaluated on reconfigure).
+set(SHADEREDITOR_VERSION_HEADER_DIR "${CMAKE_BINARY_DIR}/generated")
+set(SHADEREDITOR_VERSION_HEADER_PATH "${SHADEREDITOR_VERSION_HEADER_DIR}/shadereditor_version.h")
+file(MAKE_DIRECTORY "${SHADEREDITOR_VERSION_HEADER_DIR}")
+add_custom_target(shader_editor_version_header ALL
+    COMMAND ${CMAKE_COMMAND}
+        "-DSHADEREDITOR_VERSION_HEADER_PATH=${SHADEREDITOR_VERSION_HEADER_PATH}"
+        -P "${PROJECT_SOURCE_DIR}/cmake/GenerateVersionHeader.cmake"
+    BYPRODUCTS "${SHADEREDITOR_VERSION_HEADER_PATH}"
+    COMMENT "Generating shadereditor_version.h with the current build timestamp"
+)
 
 add_library(shader_editor_core STATIC
     third_party/imgui_color_text_edit/TextEditor.cpp
@@ -81,12 +99,10 @@ add_library(shader_editor_core STATIC
     src/ui/panels/UniformsPanel.cpp
     src/ui/widgets/DocumentDialogs.cpp
 )
+add_dependencies(shader_editor_core shader_editor_version_header)
 
-target_include_directories(shader_editor_core PUBLIC src third_party ${STB_IMAGE_INCLUDE_DIR})
+target_include_directories(shader_editor_core PUBLIC src third_party ${STB_IMAGE_INCLUDE_DIR} "${SHADEREDITOR_VERSION_HEADER_DIR}")
 target_link_libraries(shader_editor_core PUBLIC glfw imgui::imgui glad::glad glm::glm opengl32 assimp::assimp)
-target_compile_definitions(shader_editor_core PRIVATE
-    SHADEREDITOR_VERSION_TIMESTAMP="${SHADEREDITOR_VERSION_TIMESTAMP}"
-)
 if(WIN32)
     target_link_libraries(shader_editor_core PUBLIC comdlg32)
 endif()
@@ -102,11 +118,19 @@ else()
 endif()
 target_link_libraries(shader_editor PRIVATE shader_editor_core)
 
-# Ship the runtime assets beside the executable so example shaders are resolved from "<exe>/assets".
-add_custom_command(TARGET shader_editor POST_BUILD
+# Ship the runtime assets beside the executable so example shaders are resolved from
+# "<exe>/assets". This is a standalone ALL target (not a shader_editor POST_BUILD step) because
+# MSBuild can skip POST_BUILD commands entirely when it decides shader_editor itself has nothing
+# to relink (e.g. after only editing a .glsl file, with no C++ changes) - that meant shader edits
+# were silently NOT being copied to build-vcpkg/<config>/assets, so the running exe kept loading
+# the previous version. A custom target with no tracked OUTPUT always reruns on every build.
+add_custom_target(shader_editor_copy_assets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${PROJECT_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:shader_editor>/assets"
+    COMMENT "Copying assets/ next to the shader_editor executable"
 )
+add_dependencies(shader_editor_copy_assets shader_editor)
+
 
 add_subdirectory(tests)

@@ -58,6 +58,38 @@ struct ModelMaterial {
     glm::vec3 colorDiffuse {1.0F};    // Mat_Kd
     glm::vec3 colorSpecular {0.0F};   // Mat_Ks
     float specularStrength {0.0F};    // Mat_KsStrenght
+    // glTF metallic-roughness workflow factors (AI_MATKEY_METALLIC_FACTOR/ROUGHNESS_FACTOR),
+    // uploaded to assets/shaders/pbr_animation.glsl's metallicFactor/roughnessFactor uniforms so
+    // PBR glTF imports render with their authored values instead of the shader's 1.0 defaults.
+    float metallicFactor {1.0F};
+    float roughnessFactor {1.0F};
+    // True when this material has a dedicated metalness and/or roughness texture (glTF's
+    // metallicRoughnessTexture, split by AssimpModelLoader into separate "texture_metalness1"/
+    // "texture_roughness1" slots), matching pbr_animation.glsl's hasPbrTextures uniform.
+    bool hasPbrTextures {false};
+    // True when a "texture_diffuse1"/"texture_base_color1" slot is present. Some glTF materials
+    // (e.g. Khronos's CarConcept "Mechanical" material) carry only a baseColorFactor and no
+    // baseColorTexture at all; pbr_animation.glsl uses this to fall back to colorDiffuse instead
+    // of sampling an unbound texture unit (which previously produced garbage/black output).
+    bool hasDiffuseTexture {false};
+    // glTF's KHR_materials_transmission factor (AI_MATKEY_TRANSMISSION_FACTOR): 0 = fully
+    // opaque, 1 = fully transmissive (e.g. car glass/windshields). Combined with opacity to
+    // derive the alpha the renderer blends with (see bindMeshMaterial/renderFrame blending).
+    float transmissionFactor {0.0F};
+    // glTF alpha value (AI_MATKEY_OPACITY, 1.0 = fully opaque). Kept separate from
+    // transmissionFactor since either can make a material translucent independently.
+    float opacity {1.0F};
+    // True when a "texture_normal1" slot (glTF normalTexture) is present, matching
+    // pbr_animation.glsl's hasNormalMap uniform; falls back to the interpolated vertex normal
+    // when false instead of sampling an unbound sampler.
+    bool hasNormalMap {false};
+    // True when a "texture_emissive1" slot (glTF emissiveTexture) is present, matching
+    // pbr_animation.glsl's hasEmissiveTexture uniform.
+    bool hasEmissiveTexture {false};
+    // glTF emissive color factor (AI_MATKEY_COLOR_EMISSIVE), multiplied with the emissive
+    // texture (or used alone when hasEmissiveTexture is false) to add self-illumination, e.g.
+    // brake lights/headlights/glowing panels that shouldn't depend on scene lighting at all.
+    glm::vec3 emissiveFactor {0.0F};
 };
 
 // One (possibly bone-count-split) mesh of an imported model.
