@@ -30,6 +30,36 @@ void UniformState::apply(const std::string& name, UniformValue value) {
     }
 }
 
+void UniformState::clearTextureValues() {
+    for (auto& definition : definitions_) {
+        if (std::holds_alternative<std::string>(definition.currentValue)) {
+            definition.currentValue = std::string {};
+        }
+    }
+}
+
+std::unordered_map<std::string, std::string> UniformState::captureTextureValues() const {
+    std::unordered_map<std::string, std::string> result;
+    for (const auto& definition : definitions_) {
+        if (const auto* value = std::get_if<std::string>(&definition.currentValue)) {
+            result[definition.name] = *value;
+        }
+    }
+    return result;
+}
+
+void UniformState::restoreTextureValues(const std::unordered_map<std::string, std::string>& values) {
+    for (auto& definition : definitions_) {
+        if (!std::holds_alternative<std::string>(definition.currentValue)) {
+            continue;
+        }
+        const auto value = values.find(definition.name);
+        if (value != values.end()) {
+            definition.currentValue = value->second;
+        }
+    }
+}
+
 std::unordered_map<std::string, UniformValue> UniformState::values() const {
     std::unordered_map<std::string, UniformValue> result;
     // Build a lookup map for render-time uniform uploads.

@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace shadereditor {
@@ -124,5 +125,12 @@ class WorkspaceController {
     // Wall-clock timestamp of the previous renderPreview() call, used to compute the frame's
     // delta time for advancing the playback clock. Empty until the first frame is rendered.
     std::optional<std::chrono::steady_clock::time_point> lastFrameTime_;
+    // Sampler2D (texture) assignments the user made by hand while a built-in primitive was the
+    // render target, keyed by uniform name. Built-in primitives all share this single set (so
+    // switching from a plane to a sphere keeps the same manually loaded texture, per the user's
+    // request), while a loaded model keeps its own imported textures instead - see
+    // selectPrimitive()/openModel()/selectModel(), which snapshot/restore these sets whenever the
+    // render target kind changes so the two never bleed into each other.
+    std::unordered_map<std::string, std::string> primitiveTextureValues_;
 };
 }  // namespace shadereditor

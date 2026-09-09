@@ -136,12 +136,21 @@ bool WorkspaceController::handleKeyChord(const std::string& chord) { return chor
 void WorkspaceController::selectPrimitive(const std::string& primitiveId) {
     // Switching back to a primitive leaves any loaded model cached in previewRenderer_ (see
     // selectModel()) so the user can flip back and forth without re-importing.
+    const bool wasModel = renderSession_.renderTargetKind == RenderTargetKind::Model;
     renderSession_.renderTargetKind = RenderTargetKind::Primitive;
     // Primitive changes go through the same update path as shader edits to keep diagnostics unified.
     renderSession_.selectedPrimitiveId = primitiveId;
     // Built-in primitives are ~1 unit across, so restore the default (non-model) camera scale;
     // selectModel() below restores the model's own scale when switching back to it.
     renderSession_.interactionState.setSceneScale(1.0F);
+    if (wasModel) {
+        // Built-in primitives all share one texture set, independent from the model's (FR: "el
+        // modelo tiene sus propias texturas, y las primitivas las suyas también"). Only reset
+        // when actually leaving model mode - switching between primitives (e.g. plane -> sphere)
+        // must keep whatever texture the user assigned, per the user's request.
+        uniformState_.clearTextureValues();
+        uniformState_.restoreTextureValues(primitiveTextureValues_);
+    }
     updateShaders();
 }
 
@@ -167,6 +176,12 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
     }
     modelInfo_ = std::move(summary);
 
+    // Preserve the primitives' shared manual texture set before it gets cleared below, so
+    // switching back to a primitive later (selectPrimitive()) can restore it.
+    if (renderSession_.renderTargetKind == RenderTargetKind::Primitive) {
+        primitiveTextureValues_ = uniformState_.captureTextureValues();
+    }
+
     renderSession_.renderTargetKind = RenderTargetKind::Model;
     renderSession_.loadedModelId = modelPath.stem().string();
     // Default to playing the first animation clip (if any) so freshly imported animated models
@@ -180,6 +195,10 @@ bool WorkspaceController::openModel(const std::filesystem::path& modelPath) {
     // from an arbitrarily large or small imported model). setSceneScale() also resets orbit/pan.
     renderSession_.interactionState.setSceneScale(boundingRadius > 0.0F ? boundingRadius : 1.0F);
     diagnostics_.addInfo("Imported model: " + modelPath.string());
+    // A newly imported model must render with its own imported textures (bound per-mesh by
+    // PreviewRenderer::bindMeshMaterial), never with a texture the user had loaded by hand for
+    // the primitives or a previously active model under a same-named sampler uniform.
+    uniformState_.clearTextureValues();
     // Model uniforms (Mat_*/gBones/textures) are bound per-mesh by PreviewRenderer, but the
     // uniform panel still needs to know about any *shader* uniforms (e.g. MVP, custom ones);
     // updateShaders() re-runs introspection against the currently active shader pair.
@@ -190,12 +209,20 @@ bool WorkspaceController::selectModel() {
     if (!previewRenderer_.hasLoadedModel()) {
         return false;
     }
+    // Preserve the primitives' shared manual texture set before it gets cleared below, exactly
+    // like openModel() does, so switching back to a primitive later restores it.
+    if (renderSession_.renderTargetKind == RenderTargetKind::Primitive) {
+        primitiveTextureValues_ = uniformState_.captureTextureValues();
+    }
     renderSession_.renderTargetKind = RenderTargetKind::Model;
     // Re-apply the cached model's scale after a primitive selection restored the primitive
     // defaults. This keeps the original AABB-based framing when switching back without loading
     // the model again.
     const float boundingRadius = previewRenderer_.activeModelBoundingRadius();
     renderSession_.interactionState.setSceneScale(boundingRadius > 0.0F ? boundingRadius : 1.0F);
+    // Switching back to the cached model must show its own imported textures again, not any
+    // manual texture the user assigned while a primitive was active in between.
+    uniformState_.clearTextureValues();
     return updateShaders();
 }
 

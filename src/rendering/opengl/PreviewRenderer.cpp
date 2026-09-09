@@ -753,6 +753,16 @@ void PreviewRenderer::applyUniforms(GLuint program, const RenderSession& session
         // Upload the exact runtime shape discovered by the uniform metadata layer.
         if (const auto* value = std::get_if<std::string>(&uniform.currentValue)) {
             if (value->empty()) {
+                // No texture selected for this sampler (e.g. switching from an imported model,
+                // which leaves its texture_diffuse1/etc. bound to low texture units in GL's global
+                // state, back to a built-in primitive whose shader declares the same sampler name
+                // but has no texture of its own). Explicitly unbind whatever texture is currently
+                // sitting in this unit and point the sampler at it, otherwise the primitive would
+                // keep sampling the previous model's texture that happens to still be bound there.
+                glActiveTexture(GL_TEXTURE0 + textureUnit);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                glUniform1i(location, textureUnit);
+                ++textureUnit;
                 continue;
             }
             GLuint texture = 0;
