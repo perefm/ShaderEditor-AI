@@ -51,6 +51,13 @@ bool isPhoenixAutoUniform(const std::string& name, const std::string& type) {
     if (name == "emissiveFactor" && type == "vec3") {
         return true;
     }
+    // Spec 008 (mega_material.glsl): hasPbrWorkflow/hasSpecularMap/hasHeightMap are auto-supplied
+    // per-mesh from the imported material's actual data (see AssimpModelLoader/
+    // PreviewRenderer::bindMeshMaterial), exactly like hasPbrTextures/hasNormalMap above, so they
+    // must be recognized here too to avoid the same "unresponsive slider" bug.
+    if ((name == "hasPbrWorkflow" || name == "hasSpecularMap" || name == "hasHeightMap") && type == "bool") {
+        return true;
+    }
     // "gBones" is always an array (e.g. "uniform mat4 gBones[100];"); the simple tokenizer below
     // strips the "[...]" suffix from the name before this check runs, so only the type matters here.
     if (name == "gBones" && type == "mat4") {

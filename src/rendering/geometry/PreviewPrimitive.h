@@ -13,6 +13,12 @@ struct PreviewPrimitive {
     std::string label;
     std::vector<glm::vec3> vertices;
     std::vector<glm::vec2> texcoords;
+    // Per-vertex normals/tangents/biTangents mirror the Assimp model vertex
+    // layout (see ModelVertex) so that any shader designed for imported
+    // models can also render built-in primitives without a layout mismatch.
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec3> tangents;
+    std::vector<glm::vec3> biTangents;
     bool available {true};
 };
 }  // namespace shadereditor

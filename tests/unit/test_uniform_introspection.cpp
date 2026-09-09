@@ -44,6 +44,26 @@ TEST_CASE("uniform introspection recognizes Phoenix auto-uniforms as read-only")
     }
 }
 
+// Spec 008: mega_material.glsl's hasPbrWorkflow/hasSpecularMap/hasHeightMap are supplied
+// per-mesh by PreviewRenderer::bindMeshMaterial every frame, exactly like hasPbrTextures/
+// hasNormalMap; they must be recognized as read-only auto-uniforms too, or the Uniforms panel
+// would render unresponsive sliders for them (same bug class as the other material flags above).
+TEST_CASE("uniform introspection recognizes mega shader material flags as read-only") {
+    shadereditor::ShaderPairDocument document;
+    document.fragmentSource =
+        "uniform bool hasPbrWorkflow; uniform bool hasSpecularMap; uniform bool hasHeightMap; "
+        "void main(){}";
+
+    shadereditor::UniformIntrospectionService introspection;
+    const auto uniforms = introspection.discover(document);
+
+    REQUIRE(uniforms.size() == 3);
+    for (const auto& uniform : uniforms) {
+        REQUIRE(uniform.provenance == shadereditor::UniformProvenance::PhoenixAuto);
+        REQUIRE(!uniform.editable);
+    }
+}
+
 TEST_CASE("viewport Phoenix auto-uniforms require scalar float declarations") {
     shadereditor::ShaderPairDocument document;
     document.fragmentSource =

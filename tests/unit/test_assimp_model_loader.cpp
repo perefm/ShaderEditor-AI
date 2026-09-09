@@ -66,6 +66,13 @@ TEST_CASE("AssimpModelLoader imports the bundled animated Fox model") {
     // it drives the preview camera's proportional zoom/orbit/pan scaling.
     REQUIRE(result.document.boundsMax.x > result.document.boundsMin.x);
     REQUIRE(result.document.boundingRadius() > 0.0F);
+
+    // Spec 008: Fox.glb has no specular/height maps, so the new flags must gracefully default to
+    // false rather than crash or spuriously flip on (FR-006).
+    for (const auto& material : result.document.materials) {
+        REQUIRE(!material.hasSpecularMap);
+        REQUIRE(!material.hasHeightMap);
+    }
 }
 
 TEST_CASE("AssimpModelLoader imports the bundled animated CesiumMan (PBR) model") {
@@ -77,6 +84,17 @@ TEST_CASE("AssimpModelLoader imports the bundled animated CesiumMan (PBR) model"
     REQUIRE(result.document.hasSkeleton);
     REQUIRE(result.document.boneCount > 0);
     REQUIRE(!result.document.animations.empty());
+
+    // Spec 008: CesiumMan is a genuine glTF PBR asset (authors metallic/roughness factors), so
+    // mega_material.glsl must be able to tell it apart from a classic Ka/Kd/Ks material and
+    // automatically pick the Cook-Torrance shading path for it.
+    bool foundPbrWorkflowMaterial = false;
+    for (const auto& material : result.document.materials) {
+        if (material.hasPbrWorkflow) {
+            foundPbrWorkflowMaterial = true;
+        }
+    }
+    REQUIRE(foundPbrWorkflowMaterial);
 }
 
 TEST_CASE("AssimpModelLoader imports the bundled normal-map bump sample") {

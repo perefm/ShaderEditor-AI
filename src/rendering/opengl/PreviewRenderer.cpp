@@ -263,6 +263,21 @@ void PreviewRenderer::destroyGpuResources() {
         if (mesh.uvbo != 0) {
             glDeleteBuffers(1, &mesh.uvbo);
         }
+        if (mesh.normalVbo != 0) {
+            glDeleteBuffers(1, &mesh.normalVbo);
+        }
+        if (mesh.tangentVbo != 0) {
+            glDeleteBuffers(1, &mesh.tangentVbo);
+        }
+        if (mesh.biTangentVbo != 0) {
+            glDeleteBuffers(1, &mesh.biTangentVbo);
+        }
+        if (mesh.boneIdVbo != 0) {
+            glDeleteBuffers(1, &mesh.boneIdVbo);
+        }
+        if (mesh.boneWeightVbo != 0) {
+            glDeleteBuffers(1, &mesh.boneWeightVbo);
+        }
         if (mesh.vao != 0) {
             glDeleteVertexArrays(1, &mesh.vao);
         }
@@ -413,24 +428,77 @@ bool PreviewRenderer::ensureMesh(const PreviewPrimitive& primitive, std::string&
         return false;
     }
 
+    const std::size_t vertexCount = primitive.vertices.size();
+    // Primitives never carry skinning data; bone ids/weights are zeroed so the
+    // model-shader skinning fallback (totalWeight == 0 -> identity transform) applies.
+    const std::vector<glm::uvec4> zeroBoneIds(vertexCount, glm::uvec4 {0U, 0U, 0U, 0U});
+    const std::vector<glm::vec4> zeroBoneWeights(vertexCount, glm::vec4 {0.0F, 0.0F, 0.0F, 0.0F});
+    const std::vector<glm::vec3>& normals = primitive.normals.size() == vertexCount
+        ? primitive.normals
+        : std::vector<glm::vec3>(vertexCount, glm::vec3 {0.0F, 0.0F, 1.0F});
+    const std::vector<glm::vec3>& tangents = primitive.tangents.size() == vertexCount
+        ? primitive.tangents
+        : std::vector<glm::vec3>(vertexCount, glm::vec3 {1.0F, 0.0F, 0.0F});
+    const std::vector<glm::vec3>& biTangents = primitive.biTangents.size() == vertexCount
+        ? primitive.biTangents
+        : std::vector<glm::vec3>(vertexCount, glm::vec3 {0.0F, 1.0F, 0.0F});
+
     MeshBuffers mesh;
     glGenVertexArrays(1, &mesh.vao);
     glGenBuffers(1, &mesh.vbo);
     glGenBuffers(1, &mesh.uvbo);
+    glGenBuffers(1, &mesh.normalVbo);
+    glGenBuffers(1, &mesh.tangentVbo);
+    glGenBuffers(1, &mesh.biTangentVbo);
+    glGenBuffers(1, &mesh.boneIdVbo);
+    glGenBuffers(1, &mesh.boneWeightVbo);
 
     glBindVertexArray(mesh.vao);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(primitive.vertices.size() * sizeof(glm::vec3)), primitive.vertices.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
     glEnableVertexAttribArray(0);
+
+    // Location 1: normal (matches ModelVertex layout so Assimp-family shaders work here too).
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.normalVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(normals.size() * sizeof(glm::vec3)), normals.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+    glEnableVertexAttribArray(1);
+
+    // Location 2: texture coordinates.
     glBindBuffer(GL_ARRAY_BUFFER, mesh.uvbo);
     glBufferData(
         GL_ARRAY_BUFFER,
         static_cast<GLsizeiptr>(primitive.texcoords.size() * sizeof(glm::vec2)),
         primitive.texcoords.data(),
         GL_STATIC_DRAW);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
-    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+    glEnableVertexAttribArray(2);
+
+    // Location 3: tangent.
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.tangentVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(tangents.size() * sizeof(glm::vec3)), tangents.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+    glEnableVertexAttribArray(3);
+
+    // Location 4: bi-tangent.
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.biTangentVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(biTangents.size() * sizeof(glm::vec3)), biTangents.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), nullptr);
+    glEnableVertexAttribArray(4);
+
+    // Location 5: bone ids (zeroed; integer attribute).
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.boneIdVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(zeroBoneIds.size() * sizeof(glm::uvec4)), zeroBoneIds.data(), GL_STATIC_DRAW);
+    glVertexAttribIPointer(5, 4, GL_UNSIGNED_INT, sizeof(glm::uvec4), nullptr);
+    glEnableVertexAttribArray(5);
+
+    // Location 6: bone weights (zeroed; skinning fallback resolves to identity transform).
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.boneWeightVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(zeroBoneWeights.size() * sizeof(glm::vec4)), zeroBoneWeights.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), nullptr);
+    glEnableVertexAttribArray(6);
+
     glBindVertexArray(0);
 
     mesh.vertexCount = static_cast<GLsizei>(primitive.vertices.size());
@@ -827,7 +895,7 @@ void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) 
         glUniform1f(specularStrengthLocation, material.specularStrength);
     }
 
-    // Upload glTF's metallic-roughness workflow values for assets/shaders/pbr_animation.glsl.
+    // Upload glTF's metallic-roughness workflow values for assets/shaders/mega_material.glsl.
     // These come straight from the imported material (AI_MATKEY_METALLIC_FACTOR/ROUGHNESS_FACTOR
     // and whether dedicated metalness/roughness textures were found), overriding whatever the
     // user may have set in the Uniforms panel for these names so imported PBR materials render
@@ -868,6 +936,21 @@ void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) 
     if (emissiveFactorLocation >= 0) {
         glUniform3fv(emissiveFactorLocation, 1, glm::value_ptr(material.emissiveFactor));
     }
+    // Selects Cook-Torrance PBR vs. classic Blinn-Phong shading automatically per material
+    // (assets/shaders/mega_material.glsl), and whether dedicated specular/height maps exist
+    // (spec 008, FR-006).
+    const GLint hasPbrWorkflowLocation = glGetUniformLocation(program, "hasPbrWorkflow");
+    if (hasPbrWorkflowLocation >= 0) {
+        glUniform1i(hasPbrWorkflowLocation, material.hasPbrWorkflow ? 1 : 0);
+    }
+    const GLint hasSpecularMapLocation = glGetUniformLocation(program, "hasSpecularMap");
+    if (hasSpecularMapLocation >= 0) {
+        glUniform1i(hasSpecularMapLocation, material.hasSpecularMap ? 1 : 0);
+    }
+    const GLint hasHeightMapLocation = glGetUniformLocation(program, "hasHeightMap");
+    if (hasHeightMapLocation >= 0) {
+        glUniform1i(hasHeightMapLocation, material.hasHeightMap ? 1 : 0);
+    }
 
     // Bind every texture slot the material carries, using the exact Phoenix uniform name
     // (e.g. "texture_diffuse1") that AssimpModelLoader assigned for each (see FR-015). Textures
@@ -899,7 +982,7 @@ void PreviewRenderer::bindMeshMaterial(ModelMaterial& material, GLuint program) 
 }
 
 bool PreviewRenderer::isMaterialTransparent(const ModelMaterial& material) {
-    // Mirrors the alpha computed in pbr_animation.glsl's fragment shader
+    // Mirrors the alpha computed in mega_material.glsl's fragment shader
     // (min(materialOpacity, 1 - transmissionFactor)): anything below fully opaque needs blending
     // and must be drawn after - not intermixed with - the opaque geometry.
     const float alpha = std::min(material.opacity, 1.0F - material.transmissionFactor);

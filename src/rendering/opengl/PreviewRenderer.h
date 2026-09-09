@@ -68,10 +68,18 @@ class PreviewRenderer {
 
   private:
     struct MeshBuffers {
-        // GPU handles for one cached primitive mesh.
+        // GPU handles for one cached primitive mesh. The layout mirrors ModelVertex (position,
+        // normal, texCoords, tangent, biTangent, boneIds, boneWeights at locations 0-6) so that
+        // any shader written for imported Assimp models (mega/toon/rim/legacy material shaders)
+        // renders built-in primitives correctly too, not just the primitive-family shaders.
         GLuint vao {0};
         GLuint vbo {0};
         GLuint uvbo {0};
+        GLuint normalVbo {0};
+        GLuint tangentVbo {0};
+        GLuint biTangentVbo {0};
+        GLuint boneIdVbo {0};
+        GLuint boneWeightVbo {0};
         GLsizei vertexCount {0};
     };
 

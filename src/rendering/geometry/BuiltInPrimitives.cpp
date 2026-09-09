@@ -2,9 +2,11 @@
 
 #include <glm/vec3.hpp>
 #include <glm/vec2.hpp>
+#include <glm/geometric.hpp>
 
 #include <cmath>
 #include <algorithm>
+#include <cstddef>
 
 namespace shadereditor {
 namespace {
@@ -30,6 +32,57 @@ void appendTriangle(std::vector<glm::vec3>& vertices, const glm::vec3& a, const 
 void appendQuad(std::vector<glm::vec3>& vertices, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec3& d) {
     appendTriangle(vertices, a, b, c);
     appendTriangle(vertices, a, c, d);
+}
+
+// Built-in primitives are unindexed triangle soups (every vertex is
+// duplicated per triangle), so a flat per-face normal/tangent is enough to
+// give them a layout compatible with Assimp-model shaders (mega/toon/rim
+// material shaders), which expect a real normal/tangent/biTangent attribute.
+void generateFaceNormalsAndTangents(PreviewPrimitive& primitive) {
+    const std::size_t vertexCount = primitive.vertices.size();
+    primitive.normals.assign(vertexCount, glm::vec3 {0.0F, 0.0F, 1.0F});
+    primitive.tangents.assign(vertexCount, glm::vec3 {1.0F, 0.0F, 0.0F});
+    primitive.biTangents.assign(vertexCount, glm::vec3 {0.0F, 1.0F, 0.0F});
+
+    for (std::size_t i = 0; i + 2 < vertexCount; i += 3) {
+        const glm::vec3& p0 = primitive.vertices[i];
+        const glm::vec3& p1 = primitive.vertices[i + 1];
+        const glm::vec3& p2 = primitive.vertices[i + 2];
+        const glm::vec3 edge1 = p1 - p0;
+        const glm::vec3 edge2 = p2 - p0;
+        glm::vec3 normal = glm::cross(edge1, edge2);
+        const float normalLength = glm::length(normal);
+        normal = normalLength > 1e-8F ? normal / normalLength : glm::vec3 {0.0F, 0.0F, 1.0F};
+
+        glm::vec3 tangent {1.0F, 0.0F, 0.0F};
+        if (i + 2 < primitive.texcoords.size()) {
+            const glm::vec2& uv0 = primitive.texcoords[i];
+            const glm::vec2& uv1 = primitive.texcoords[i + 1];
+            const glm::vec2& uv2 = primitive.texcoords[i + 2];
+            const glm::vec2 deltaUv1 = uv1 - uv0;
+            const glm::vec2 deltaUv2 = uv2 - uv0;
+            const float det = deltaUv1.x * deltaUv2.y - deltaUv2.x * deltaUv1.y;
+            if (std::fabs(det) > 1e-8F) {
+                const float invDet = 1.0F / det;
+                tangent = invDet * (edge1 * deltaUv2.y - edge2 * deltaUv1.y);
+                const float tangentLength = glm::length(tangent);
+                if (tangentLength > 1e-8F) {
+                    tangent /= tangentLength;
+                }
+            }
+        }
+        // Re-orthogonalize against the normal (Gram-Schmidt) so tangent/normal stay perpendicular.
+        tangent = tangent - normal * glm::dot(normal, tangent);
+        const float tangentLength = glm::length(tangent);
+        tangent = tangentLength > 1e-8F ? tangent / tangentLength : glm::vec3 {1.0F, 0.0F, 0.0F};
+        const glm::vec3 biTangent = glm::cross(normal, tangent);
+
+        for (std::size_t v = i; v < i + 3; ++v) {
+            primitive.normals[v] = normal;
+            primitive.tangents[v] = tangent;
+            primitive.biTangents[v] = biTangent;
+        }
+    }
 }
 
 PreviewPrimitive makePlane() {
@@ -119,6 +172,7 @@ std::vector<PreviewPrimitive> makeBuiltInPrimitives() {
     };
     for (auto& primitive : primitives) {
         generateUvMap(primitive);
+        generateFaceNormalsAndTangents(primitive);
     }
     return primitives;
 }
