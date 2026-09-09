@@ -558,9 +558,10 @@ void Application::drawShaderEditorWindow() {
     const auto& document = editorState.document();
     std::string source = document.source;
     if (ImGui::Begin("Shader Editor", &showShaderEditor_)) {
-        if (document.isDirty) {
-            ImGui::TextUnformatted("(modified)");
-        }
+        const std::string shaderName = document.shaderPath.has_value()
+            ? document.shaderPath->string()
+            : std::string("Untitled shader");
+        ImGui::TextUnformatted(document.isDirty ? (shaderName + " [*]").c_str() : shaderName.c_str());
         if (ImGui::Button("Open .glsl")) {
             openShaderFromDialog();
         }
@@ -581,21 +582,20 @@ void Application::drawShaderEditorWindow() {
             source = formatShaderSource(source);
             editorState.updateSource(source);
         }
-        if (document.isDirty) {
-            ImGui::SameLine();
-            ImGui::TextWrapped("%s", documentDialogs_.unsavedChangesMessage(document).c_str());
-        }
 
         if (shaderEditorText_ != source) {
             shaderEditor_.SetText(source);
-            shaderEditorText_ = source;
+            // Use the editor's own (possibly normalized, e.g. trailing newline) text as the new
+            // baseline so the next comparison isn't tripped by cosmetic differences the widget
+            // itself introduces - that used to mark a freshly loaded/opened shader as dirty.
+            shaderEditorText_ = shaderEditor_.GetText();
         }
         ImVec2 editorSize = ImGui::GetContentRegionAvail();
         editorSize.y = std::max(1.0F, editorSize.y);
         shaderEditor_.SetFontScale(editorTextScale_);
         shaderEditor_.Render("##phoenix-source", editorSize, true);
         const std::string editedSource = shaderEditor_.GetText();
-        if (editedSource != source) {
+        if (editedSource != shaderEditorText_) {
             shaderEditorText_ = editedSource;
             editorState.updateSource(editedSource);
         }

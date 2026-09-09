@@ -27,10 +27,14 @@ tool panels in a dockable Dear ImGui layout.
   - `Reset View`: restore the default framing
 - GLM-based math pipeline for preview transforms and uniform upload
 - Phoenix-compatible engine-provided shader uniforms and vertex attributes
-- Bundled model shader examples, including `bone_animation.glsl`,
-  `bone_animation_material_only.glsl`, `bump_mapping.glsl`,
-  `bone_animation_bump_mapping.glsl`, `material_pixel_lighting.glsl`,
-  `pbr_animation.glsl`, and `pbr_animation_artistic.glsl`
+- Bundled shader catalog covering plain examples, a single "mega" material
+  shader for any Assimp import (bones + PBR/Blinn-Phong + every material map),
+  stylized variants (toon/cel shading, rim lighting), and the legacy
+  per-feature shaders kept as reference (see "Bundled shaders" below and
+  [assets/shaders/README.md](assets/shaders/README.md))
+- Built-in primitives (plane/cube/torus/sphere/cylinder) and imported Assimp
+  models share the same 7-attribute vertex layout, so any bundled shader can
+  render either a primitive or a loaded model interchangeably
 
 ### Engine-provided uniforms
 
@@ -71,27 +75,28 @@ edited there — declaring them in a shader is enough to receive them:
   `texture_metalness1`, `texture_roughness1`, and `texture_height1`: active
   mesh texture slots, loaded from external files or embedded model images.
 - `uniform float metallicFactor`, `roughnessFactor`, `transmissionFactor`,
-  `materialOpacity`: active mesh glTF metallic-roughness/transmission factors
-  (`pbr_animation*.glsl`).
+  `materialOpacity`: active mesh glTF metallic-roughness/transmission factors.
 - `uniform bool hasPbrTextures`, `hasDiffuseTexture`, `hasNormalMap`,
-  `hasEmissiveTexture`: whether the active mesh has a dedicated
-  metallic-roughness, base color, normal, or emissive texture bound, so a
-  shader can fall back to the scalar factors/colors above when it does not.
-- `uniform vec3 emissiveFactor`: active mesh glTF emissive color
-  (`pbr_animation*.glsl`).
+  `hasEmissiveTexture`, `hasSpecularMap`, `hasHeightMap`, `hasPbrWorkflow`:
+  whether the active mesh has a dedicated texture/workflow for that channel,
+  so a shader can fall back to the scalar factors/colors above when it does
+  not. All of these flags are engine-supplied and read-only in the `Uniforms`
+  panel, exactly like the textures/factors they gate.
+- `uniform vec3 emissiveFactor`: active mesh glTF emissive color.
 
 The bundled `assets/models/NormalTangentTest/NormalTangentTest.glb` is a
-royalty-free Khronos CC0 sample with embedded normal maps. Use it with
-`bump_mapping.glsl` to validate tangent-space bump mapping. The
-`bone_animation_bump_mapping.glsl` example combines the same normal mapping
-with Phoenix-compatible skinning and can also be used with animated models.
-See "Bundled shaders" below for a description of every shader shipped with
-the project.
+royalty-free Khronos CC0 sample with embedded normal maps; use it with
+`mega_material.glsl` (or `legacy/bump_mapping.glsl`) to validate tangent-space
+bump mapping. See "Bundled shaders" below for a description of every shader
+shipped with the project.
 
-Imported model vertex attributes follow the Phoenix mesh layout:
-`aPos` (0), `aNormal` (1), `aTexCoords` (2), `aTangent` (3),
-`aBiTangent` (4), `aBoneID` (5), and `aBoneWeight` (6). Built-in primitives
-provide `aPos` and `aUv`.
+Imported model vertex attributes **and** built-in primitives now share one
+vertex layout: `aPos` (0), `aNormal` (1), `aTexCoords` (2), `aTangent` (3),
+`aBiTangent` (4), `aBoneID` (5), and `aBoneWeight` (6). Primitives compute flat
+per-face normals/tangents at generation time and upload zeroed bone
+ids/weights (resolving to an identity skin transform), so **any** bundled
+shader — whether written for a primitive or for an imported model — renders
+correctly against either kind of render target.
 
 Declare and use these names in shader stages that need them. Other uniforms
 declared by the shader are discovered after a successful compile and remain
@@ -100,10 +105,14 @@ editable from the `Uniforms` panel.
 ### Bundled shaders
 
 All bundled shaders live in `assets/shaders/`. Each is a single `.glsl` file
-with a `#type vertex` and `#type fragment` section.
+with a `#type vertex` and `#type fragment` section. See
+[assets/shaders/README.md](assets/shaders/README.md) for the full catalog and
+[specs/archive/008-mega-shader-pbr-lighting/contracts/shader-catalog.md](specs/archive/008-mega-shader-pbr-lighting/contracts/shader-catalog.md)
+for the original design contract. Since the primitive and imported-model
+vertex layouts are unified (see above), every shader below can be applied to
+a built-in primitive or an imported model.
 
-**Primitive-only examples** (built-in plane/cube/torus/sphere/cylinder,
-`aPos`/`aUv` vertex layout only):
+**Category 1 — learning / template** (no Assimp material data or bones):
 
 - `basic.glsl` — flat-shaded solid color from a single `uniform vec3 color`;
   the minimal starting point for a new shader.
@@ -114,49 +123,44 @@ with a `#type vertex` and `#type fragment` section.
 - `textured.glsl` — samples a single `sampler2D imageTexture` and outputs it
   unlit.
 - `pixel_lighting.glsl` — per-pixel ambient + diffuse + specular lighting
-  using a face normal derived from screen-space derivatives (`dFdx`/`dFdy`),
-  so it works on primitives that carry no vertex normal attribute.
+  using a face normal derived from screen-space derivatives (`dFdx`/`dFdy`).
 
-**Imported-model examples** (Phoenix mesh vertex layout: `aPos`, `aNormal`,
-`aTexCoords`, `aTangent`, `aBiTangent`, `aBoneID`, `aBoneWeight`):
+**Category 2 — realistic Assimp materials**:
 
-- `bone_animation.glsl` — Phoenix-compatible skeletal (bone) animation with
-  Blinn-Phong lighting and a diffuse texture; the general-purpose default for
-  animated imported models.
-- `bone_animation_material_only.glsl` — same skinning as `bone_animation.glsl`
-  but samples no textures at all; shading comes entirely from the imported
-  material's `Mat_Ka`/`Mat_Kd`/`Mat_Ks`/`Mat_KsStrenght` colors. Useful for
-  animated models with no usable texture files.
-- `bump_mapping.glsl` — static (unskinned) tangent-space normal mapping plus
-  Blinn-Phong lighting; validate with
-  `assets/models/NormalTangentTest/NormalTangentTest.glb`.
-- `bone_animation_bump_mapping.glsl` — combines the same tangent-space normal
-  mapping with Phoenix-compatible skinning, for animated models with normal
-  maps.
-- `material_pixel_lighting.glsl` — unskinned counterpart to
-  `bone_animation_material_only.glsl`: no `gBones` skinning path (suits
-  static models and models animated by node keyframes), no texture sampling,
-  Blinn-Phong lighting evaluated per pixel in world space from the imported
-  material colors alone. Applying it to a skinned model renders that model in
-  its bind pose.
-- `pbr_animation.glsl` — physically-based (Cook-Torrance metallic-roughness)
-  skinned shader for glTF-style imports. Reads the imported material's base
-  color/metallic/roughness/transmission/opacity/normal/emissive values
-  (falling back to scalar factors when a mesh has no dedicated texture for
-  one of them) and blends translucent materials (e.g. glass) correctly
-  against the rest of the scene. All of its material-driven uniforms are
-  engine-supplied and read-only in the `Uniforms` panel — this shader is a
-  physically-accurate reference/baseline, not meant to be hand-tuned per
-  material.
-- `pbr_animation_artistic.glsl` — same physically-based baseline as
-  `pbr_animation.glsl`, plus extra ordinary (user-editable) "art direction"
-  uniforms layered on top: `artMetallicBoost`, `artRoughnessBoost`,
-  `artRoughnessBias`, `artSpecularIntensity`, `artAlbedoTint`,
-  `artAmbientBoost`, `artOpacityMultiplier`, `artNormalStrength`, and
-  `artEmissiveBoost`. Use this variant to push a model's look for stylistic
-  reasons without hand-editing the source material; at every control's
-  neutral default (1.0/0.0/white) the render is identical to
-  `pbr_animation.glsl`.
+- `mega_material.glsl` — **recommended default shader** for any Assimp-imported
+  model. Supports skeletal animation (with a static-model fallback), a PBR
+  metallic-roughness workflow and classic Blinn-Phong (chosen automatically
+  per material), and every material map Assimp/glTF can provide: base
+  color/diffuse, normal, metalness, roughness, emissive, specular, and height.
+  Falls back to the imported material's `Mat_Ka`/`Mat_Kd`/`Mat_Ks` colors for
+  any channel with no texture. Single render pass, one light.
+- `legacy/*.glsl` — the shaders `mega_material.glsl` consolidates
+  (`bone_animation.glsl`, `bone_animation_bump_mapping.glsl`,
+  `bone_animation_material_only.glsl`, `bump_mapping.glsl`,
+  `material_pixel_lighting.glsl`, `pbr_animation.glsl`), kept as reference
+  examples of each individual feature in isolation.
+
+**Category 3 — stylized/artistic Assimp materials**:
+
+- `toon_material.glsl` — cel/toon shading: discrete lighting bands
+  (`toonBands`) over the same data pipeline (bones + material maps) as
+  `mega_material.glsl`.
+- `rim_lighting_material.glsl` — Fresnel-style rim/silhouette highlight
+  (`rimColor`/`rimPower`) over the same data pipeline.
+- `legacy/pbr_animation_artistic.glsl` — earlier artistic PBR variant with
+  extra user-editable "art direction" uniforms (`artMetallicBoost`,
+  `artRoughnessBoost`, `artRoughnessBias`, `artSpecularIntensity`,
+  `artAlbedoTint`, `artAmbientBoost`, `artOpacityMultiplier`,
+  `artNormalStrength`, `artEmissiveBoost`); kept as reference, not merged into
+  the newer stylized shaders.
+
+**Out of scope** (see [assets/shaders/README.md](assets/shaders/README.md) for
+details): baked ambient occlusion is feasible without a render-architecture
+change and is a candidate for a future spec; real-time SSAO and a
+Bokeh/Depth-of-Field shader both require a sampleable depth attachment and a
+second post-process pass, which the single-framebuffer/single-pass
+`PreviewRenderer` does not currently support.
+
 
 ### Keyframe animation and cameras
 

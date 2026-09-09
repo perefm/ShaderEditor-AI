@@ -34,7 +34,7 @@ const char* phoenixTextureTypeName(aiTextureType type) {
     switch (type) {
         case aiTextureType_DIFFUSE: return "diffuse";
         // glTF's baseColorTexture (the PBR albedo map) is imported by Assimp under this
-        // dedicated type rather than aiTextureType_DIFFUSE; Phoenix's pbr_animation.glsl still
+        // dedicated type rather than aiTextureType_DIFFUSE; Phoenix's mega_material.glsl still
         // expects it in "texture_diffuse1", so it is named the same as legacy diffuse here.
         case aiTextureType_BASE_COLOR: return "diffuse";
         case aiTextureType_SPECULAR: return "specular";
@@ -189,14 +189,19 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
         result.material.specularStrength = specularStrength;
 
         // glTF metallic-roughness factors (defaulted to fully metallic/rough per the Assimp/
-        // glTF spec default when a material omits them); pbr_animation.glsl falls back to these
+        // glTF spec default when a material omits them); mega_material.glsl falls back to these
         // scalars whenever no dedicated metalness/roughness texture is bound below.
         float metallicFactor = 1.0F;
         float roughnessFactor = 1.0F;
-        material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor);
-        material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor);
+        // AI_SUCCESS here (rather than the resulting value) is the signal mega_material.glsl
+        // uses to pick PBR vs. classic Blinn-Phong shading: classic OBJ/FBX/DAE materials simply
+        // don't author these keys, whereas a genuine PBR material might legitimately set them to
+        // the same values as the defaults above.
+        const bool hasMetallicFactor = material->Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor) == AI_SUCCESS;
+        const bool hasRoughnessFactor = material->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor) == AI_SUCCESS;
         result.material.metallicFactor = metallicFactor;
         result.material.roughnessFactor = roughnessFactor;
+        result.material.hasPbrWorkflow = hasMetallicFactor || hasRoughnessFactor;
 
         // glTF transparency: KHR_materials_transmission (glass-like see-through, e.g. this car's
         // windshield) and the base alpha/opacity channel are independent ways a material can be
@@ -253,10 +258,20 @@ ModelMesh convertMesh(const aiMesh* mesh, const aiScene* scene, const std::files
                 if (textureType == aiTextureType_EMISSIVE) {
                     result.material.hasEmissiveTexture = true;
                 }
+                if (textureType == aiTextureType_SPECULAR) {
+                    result.material.hasSpecularMap = true;
+                }
+                if (textureType == aiTextureType_HEIGHT) {
+                    result.material.hasHeightMap = true;
+                }
+                if (textureType == aiTextureType_METALNESS || textureType == aiTextureType_DIFFUSE_ROUGHNESS ||
+                    textureType == aiTextureType_GLTF_METALLIC_ROUGHNESS) {
+                    result.material.hasPbrWorkflow = true;
+                }
                 if (textureType == aiTextureType_GLTF_METALLIC_ROUGHNESS) {
                     // This Assimp version exposes glTF's single packed metallicRoughnessTexture
                     // only under this dedicated type (not METALNESS/DIFFUSE_ROUGHNESS), so it
-                    // must be bound to BOTH Phoenix uniform names the pbr_animation.glsl shader
+                    // must be bound to BOTH Phoenix uniform names the mega_material.glsl shader
                     // samples ("texture_metalness1" reads .b, "texture_roughness1" reads .g from
                     // the very same image - see GltfMaterial.h's channel documentation).
                     ModelTextureSlot roughnessSlot = slot;
@@ -379,6 +394,8 @@ bool materialsEqual(const ModelMaterial& a, const ModelMaterial& b) {
         a.hasDiffuseTexture != b.hasDiffuseTexture || a.transmissionFactor != b.transmissionFactor ||
         a.opacity != b.opacity || a.hasNormalMap != b.hasNormalMap ||
         a.hasEmissiveTexture != b.hasEmissiveTexture || a.emissiveFactor != b.emissiveFactor ||
+        a.hasPbrWorkflow != b.hasPbrWorkflow || a.hasSpecularMap != b.hasSpecularMap ||
+        a.hasHeightMap != b.hasHeightMap ||
         a.textureSlots.size() != b.textureSlots.size()) {
         return false;
     }
