@@ -1,6 +1,10 @@
-# ShaderEditor
+<p align="center">
+  <img src="docs/screenshots/header.png" alt="Spontz Phoenix Shader Editor" width="360">
+</p>
 
-ShaderEditor is a desktop OpenGL 4.6 shader workspace for editing Phoenix-style
+# Phoenix Shader Editor
+
+Phoenix Shader Editor is a desktop OpenGL 4.6 shader workspace for editing Phoenix-style
 single-file GLSL shaders, previewing them on built-in 3D primitives, and arranging the
 tool panels in a dockable Dear ImGui layout.
 
@@ -222,6 +226,13 @@ slots by type and embedded-image count, skeleton and bone counts, every
 animation clip with its duration and channel count, the model's cameras and
 whether each is animated, and the bounding box and radius. The panel refreshes
 automatically each time a model is loaded.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Textured primitive with a custom sampler2D texture](docs/screenshots/textured-primitive.png) Manually loading a texture onto a built-in primitive via `Load Image` | ![Toon/cel-shading material on a skinned animated model](docs/screenshots/toon-shader-animation.png) Toon/cel-shading material driving a skinned, animated Assimp model |
+| ![Mega PBR material on an imported glTF car model](docs/screenshots/pbr-model.png) The bundled "mega" PBR shader rendering an imported glTF model (metallic-roughness, normal, and emissive maps) | ![Rim lighting material on an imported model](docs/screenshots/rim-lighting.png) Rim-lighting material variant on the same imported model |
 
 ## Project Layout
 
